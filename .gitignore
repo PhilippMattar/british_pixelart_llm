@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual envs / uv
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+
+# Claude Code local (personal) settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+
+# Project data policy (PLAN.md §3): raw seed corpora are never committed —
+# only the collection/cleaning scripts. Generated JSONL under training/data/ IS committed.
+training/seeds/raw/
+
+# Course-provided prompt PDF — not ours to redistribute publicly (PLAN.md §3 data policy)
+Intelligent Agents Project Prompt.pdf
