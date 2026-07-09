@@ -1,0 +1,27 @@
+# bpx model registry — see PLAN.md §4.2.
+# Adding a model is data-only: append a [[models]] block, no code changes.
+#   provider:    "ollama" | "openai_compat"
+#   endpoint:    OpenAI-compatible base URL (…/v1)
+#   api_key_env: env var holding the key (blank -> local Ollama placeholder)
+#
+# NOTE: PLAN.md §3 locks the persona *base* as qwen3:8b. This machine currently has
+# qwen3.5 + gemma3:1b, so the Phase-0 defaults below point at what is installed so the
+# streaming loop runs today. Reconcile the base tag before Phase 2 / gate G1 (§7.1).
+
+[[models]]
+name = "base"
+provider = "ollama"
+endpoint = "http://localhost:11434/v1"
+model_id = "qwen3.5:4b"
+api_key_env = ""
+is_persona = false
+keywords = []
+
+[[models]]
+name = "gemma"
+provider = "ollama"
+endpoint = "http://localhost:11434/v1"
+model_id = "gemma3:1b"
+api_key_env = ""
+is_persona = false
+keywords = []
