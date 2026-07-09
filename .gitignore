@@ -8,7 +8,8 @@ dist/
 .ruff_cache/
 .mypy_cache/
 
-# Virtual envs / uv
+# Virtual envs / uv (.venv may be a symlink to a venv outside iCloud — match both)
+.venv
 .venv/
 venv/
 
