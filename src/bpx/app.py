@@ -1,8 +1,9 @@
 """Streaming chat loop with SQLite persistence (Phase 1). See PLAN.md §5, §9.
 
 Messages, conversations, and the per-conversation model are persisted via `Store`, so a
-chat resumes with full scrollback. This step wires persistence into the single-conversation
-loop; the sidebar, conversation switching, and model picker arrive in the next steps.
+chat resumes with full scrollback. Slash commands (`/model`, `/help`, `/quit`) plus the
+`/model` picker switch the active model, which is pinned per conversation (R5). The
+sidebar and conversation switching arrive next.
 
 `client_factory` is injectable so tests can supply a fake streaming client (offline).
 """
@@ -20,6 +21,7 @@ from textual.widgets import Footer, Header, Input, Markdown
 from .llm import LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
 from .store import Store
+from .widgets.model_picker import ModelPicker
 from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
@@ -37,6 +39,7 @@ class ChatApp(App[None]):
 
     BINDINGS = [
         ("escape", "cancel", "Stop generating"),
+        ("ctrl+o", "model_picker", "Model"),
         ("ctrl+c", "quit", "Quit"),
     ]
 
@@ -54,7 +57,7 @@ class ChatApp(App[None]):
         yield Header()
         yield VerticalScroll(id="log")
         yield WaitingIndicator(id="waiting")
-        yield Input(placeholder="Message bpx…", id="prompt")
+        yield Input(placeholder="Message bpx…   (/model to switch · /help)", id="prompt")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -110,6 +113,15 @@ class ChatApp(App[None]):
                     )
                 )
         log.scroll_end(animate=False)
+        self._update_status()
+
+    def _update_status(self) -> None:
+        """Status badge (Header sub-title): active model · conversation title."""
+        if self.store is None or self.conversation_id is None:
+            return
+        conversation = self.store.get_conversation(self.conversation_id)
+        title = conversation.title if conversation is not None else ""
+        self.sub_title = f"{self.model_name}  ·  {title}"
 
     # -- send / generate --
     async def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -117,11 +129,55 @@ class ChatApp(App[None]):
         if not text or self.store is None or self.conversation_id is None:
             return
         event.input.value = ""
+        if text.startswith("/"):
+            self._handle_command(text)
+            return
         self.store.add_message(self.conversation_id, "user", text)
         self.store.touch(self.conversation_id)
         self._maybe_set_title(text)
         await self._mount(self._user_md(text))
         self.generate()
+
+    # -- slash commands & model switching --
+    def _handle_command(self, text: str) -> None:
+        parts = text[1:].split(maxsplit=1)
+        command = parts[0].lower() if parts else ""
+        arg = parts[1].strip() if len(parts) > 1 else ""
+        if command == "model":
+            if arg:
+                self._switch_model(arg)
+            else:
+                self.action_model_picker()
+        elif command in ("quit", "q", "exit"):
+            self.exit()
+        elif command == "help":
+            self.notify(
+                "/model [name] · /help · /quit", title="Commands", timeout=6
+            )
+        else:
+            self.notify(f"Unknown command: /{command}", severity="warning")
+
+    def _switch_model(self, name: str) -> None:
+        if name not in self.registry.names():
+            self.notify(
+                f"Unknown model '{name}'. Available: {', '.join(self.registry.names())}",
+                severity="warning",
+            )
+            return
+        assert self.conversation_id is not None and self.store is not None
+        self.model_name = name
+        self.store.set_model(self.conversation_id, name)
+        self._update_status()
+        self.notify(f"Model → {name}")
+
+    def action_model_picker(self) -> None:
+        self.push_screen(
+            ModelPicker(self.registry.names(), self.model_name), self._on_model_picked
+        )
+
+    def _on_model_picked(self, name: str | None) -> None:
+        if name:
+            self._switch_model(name)
 
     def _maybe_set_title(self, text: str) -> None:
         assert self.store is not None and self.conversation_id is not None

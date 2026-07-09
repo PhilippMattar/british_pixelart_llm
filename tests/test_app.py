@@ -1,7 +1,8 @@
 import pytest
-from textual.widgets import Input, Markdown
+from textual.widgets import Input, ListView, Markdown
 
 from bpx.app import ChatApp
+from bpx.widgets.model_picker import ModelPicker
 from bpx.widgets.spinner import WaitingIndicator
 
 
@@ -89,3 +90,51 @@ async def test_empty_submit_adds_nothing(db):
         await prompt.action_submit()
         await pilot.pause()
         assert app.store.list_messages(app.conversation_id) == []
+
+
+async def _command(app, pilot, text):
+    prompt = app.query_one("#prompt", Input)
+    prompt.value = text
+    await prompt.action_submit()
+    await pilot.pause()
+
+
+async def test_slash_model_switches_and_persists(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, "/model gemma")
+        assert app.model_name == "gemma"
+        assert app.store.get_conversation(app.conversation_id).model_name == "gemma"
+        assert "gemma" in app.sub_title  # status badge updated
+        assert app.store.list_messages(app.conversation_id) == []  # command isn't a message
+
+
+async def test_unknown_model_ignored(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, "/model nope")
+        assert app.model_name == "base"  # unchanged
+
+
+async def test_switched_model_used_for_next_reply(db):
+    app = ChatApp(client_factory=_factory("hi"))
+    async with app.run_test() as pilot:
+        await _command(app, pilot, "/model gemma")
+        await _send(app, pilot, "hello")
+        msgs = app.store.list_messages(app.conversation_id)
+        assert msgs[-1].role == "assistant"
+        assert msgs[-1].model_name == "gemma"
+
+
+async def test_model_picker_opens_and_selects(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        app.action_model_picker()
+        await pilot.pause()
+        picker = app.screen  # the modal is the top screen on the stack
+        assert isinstance(picker, ModelPicker)
+        lv = picker.query_one(ListView)
+        lv.index = app.registry.names().index("gemma")
+        lv.action_select_cursor()
+        await pilot.pause()
+        assert app.model_name == "gemma"
