@@ -29,9 +29,15 @@ In the app: **Enter** sends · **Esc** stops · **Ctrl+C** quits. Slash commands
 
 Dev loop: `uv run textual run --dev bpx.app` in one terminal, `uv run textual console` in another.
 
-> **macOS + iCloud:** don't keep this repo inside an iCloud-synced folder (e.g. `~/Documents`).
-> iCloud creates conflicted copies of `.venv` that corrupt the environment. Use `~/dev/…` or
-> set `UV_PROJECT_ENVIRONMENT` to a venv path outside iCloud.
+> **macOS + iCloud:** don't keep this repo inside an iCloud-synced folder (e.g. `~/Documents`)
+> — iCloud conflict-copies and even resurrects `.venv` state, corrupting the environment
+> (it fights symlinked venvs too). Prefer a non-synced path like `~/dev/…`. If you must stay,
+> mark the venv ignored for sync and know the recovery one-liner:
+>
+> ```bash
+> xattr -w 'com.apple.fileprovider.ignore#P' 1 .venv   # ask iCloud to skip .venv
+> rm -rf .venv && uv sync                              # recovery if it breaks anyway
+> ```
 
 ## Test
 
