@@ -2,6 +2,7 @@ import pytest
 from textual.widgets import Input, Markdown
 
 from bpx.app import ChatApp
+from bpx.widgets.spinner import WaitingIndicator
 
 
 class _FakeClient:
@@ -54,6 +55,8 @@ async def test_send_persists_user_and_assistant(db):
         assert msgs[0].content == "hello"
         assert msgs[1].content == "hi there"
         assert msgs[1].complete is True
+        # waiting indicator hides again once the reply completes
+        assert app.query_one("#waiting", WaitingIndicator).has_class("-idle")
 
 
 async def test_first_message_sets_title(db):

@@ -20,6 +20,7 @@ from textual.widgets import Footer, Header, Input, Markdown
 from .llm import LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
 from .store import Store
+from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
 
@@ -52,6 +53,7 @@ class ChatApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield VerticalScroll(id="log")
+        yield WaitingIndicator(id="waiting")
         yield Input(placeholder="Message bpx…", id="prompt")
         yield Footer()
 
@@ -143,6 +145,8 @@ class ChatApp(App[None]):
         )
         bubble = await self._mount(self._assistant_md("", self.model_name))
         log = self.query_one("#log", VerticalScroll)
+        waiting = self.query_one("#waiting", WaitingIndicator)
+        waiting.start()
         acc = ""
         cancelled = False
         try:
@@ -154,6 +158,7 @@ class ChatApp(App[None]):
             cancelled = True
             raise
         finally:
+            waiting.stop(cancelled=cancelled)
             self.store.update_message(assistant_id, acc, complete=not cancelled)
             self.store.touch(conversation_id)
 
