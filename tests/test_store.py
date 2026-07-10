@@ -106,3 +106,16 @@ def test_migration_002_renames_base_to_qwen(tmp_path):
     assert reopened.list_messages(cid)[0].model_name == "qwen"
     reopened.close()
     store.close()
+
+
+def test_auto_switch_defaults_on_and_persists(tmp_path):
+    db = tmp_path / "bpx.db"
+    store = Store.open(db)
+    cid = store.create_conversation(store.default_project_id(), "qwen")
+    assert store.get_conversation(cid).auto_switch is True  # migration 003 default
+    store.set_auto_switch(cid, False)
+    store.close()
+
+    reopened = Store.open(db)
+    assert reopened.get_conversation(cid).auto_switch is False  # persisted
+    reopened.close()

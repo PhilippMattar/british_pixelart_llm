@@ -187,3 +187,29 @@ async def test_select_conversation_from_sidebar(db):
         lv.action_select_cursor()
         await pilot.pause()
         assert app.conversation_id == first
+
+
+async def test_keyword_autoswitches_persona(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        assert app.model_name == "qwen"
+        await _send(app, pilot, "Alright mate, fancy a cuppa? innit")
+        assert app.model_name == "british"  # auto-switched on British keywords
+        roles = [m.role for m in app.store.list_messages(app.conversation_id)]
+        assert "event" in roles  # switch logged into the conversation
+
+
+async def test_manual_model_pins_and_disables_autoswitch(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, "/model gemma")  # manual choice pins
+        assert app.store.get_conversation(app.conversation_id).auto_switch is False
+        await _send(app, pilot, "Aye, dinnae be daft, it's dreich")  # would auto-switch
+        assert app.model_name == "gemma"  # but stays pinned
+
+
+async def test_plain_message_does_not_autoswitch(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "Please summarize this paragraph.")
+        assert app.model_name == "qwen"  # no keyword, no switch
