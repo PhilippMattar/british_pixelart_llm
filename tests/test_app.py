@@ -138,3 +138,52 @@ async def test_model_picker_opens_and_selects(db):
         lv.action_select_cursor()
         await pilot.pause()
         assert app.model_name == "gemma"
+
+
+def _sidebar_count(app) -> int:
+    return len(app.query_one("#sidebar", ListView).children)
+
+
+async def test_new_conversation_switches_and_clears(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "hello")
+        first = app.conversation_id
+        await _command(app, pilot, "/new")
+        assert app.conversation_id != first
+        assert app.store.list_messages(app.conversation_id) == []  # fresh chat
+        assert _sidebar_count(app) == 2
+
+
+async def test_delete_selects_another(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        first = app.conversation_id
+        await _command(app, pilot, "/new")
+        second = app.conversation_id
+        await _command(app, pilot, "/delete")  # deletes the active (second)
+        ids = [c.id for c in app.store.list_conversations(app.store.default_project_id())]
+        assert second not in ids
+        assert app.conversation_id == first
+        assert _sidebar_count(app) == 1
+
+
+async def test_delete_last_creates_fresh(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        only = app.conversation_id
+        await _command(app, pilot, "/delete")
+        assert app.conversation_id != only  # never left with zero conversations
+        assert len(app.store.list_conversations(app.store.default_project_id())) == 1
+
+
+async def test_select_conversation_from_sidebar(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        first = app.conversation_id
+        await _command(app, pilot, "/new")  # second active; sidebar order [second, first]
+        lv = app.query_one("#sidebar", ListView)
+        lv.index = 1  # the older conversation
+        lv.action_select_cursor()
+        await pilot.pause()
+        assert app.conversation_id == first

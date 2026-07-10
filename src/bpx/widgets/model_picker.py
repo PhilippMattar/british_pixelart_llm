@@ -44,6 +44,7 @@ class ModelPicker(ModalScreen[str | None]):
             picker.index = self._names.index(self._current)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
+        event.stop()  # don't let this bubble to the app's sidebar handler
         index = event.list_view.index
         self.dismiss(self._names[index] if index is not None else None)
 

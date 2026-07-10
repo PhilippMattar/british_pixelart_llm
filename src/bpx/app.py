@@ -1,11 +1,10 @@
-"""Streaming chat loop with SQLite persistence (Phase 1). See PLAN.md §5, §9.
+"""Textual chat app with a conversation sidebar and SQLite persistence (Phase 1).
 
-Messages, conversations, and the per-conversation model are persisted via `Store`, so a
-chat resumes with full scrollback. Slash commands (`/model`, `/help`, `/quit`) plus the
-`/model` picker switch the active model, which is pinned per conversation (R5). The
-sidebar and conversation switching arrive next.
-
-`client_factory` is injectable so tests can supply a fake streaming client (offline).
+See PLAN.md §5, §9. A left sidebar lists conversations (newest first); the right pane is
+the streaming chat log + input. Conversations are created/switched/removed (R4) and each
+resumes with full scrollback (R3). Slash commands drive it: `/new`, `/delete`, `/model`,
+`/help`, `/quit`. The active model is pinned per conversation and shown in the Header badge
+(R5). `client_factory` is injectable so tests can supply a fake streaming client (offline).
 """
 
 from __future__ import annotations
@@ -15,8 +14,8 @@ from collections.abc import Callable
 
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
-from textual.widgets import Footer, Header, Input, Markdown
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown
 
 from .llm import LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
@@ -32,13 +31,17 @@ class ChatApp(App[None]):
     SUB_TITLE = "british_pixelart_llm"
 
     CSS = """
-    #log { padding: 1 2; }
+    #sidebar { width: 32; border-right: solid $panel; }
+    #sidebar > ListItem { padding: 0 1; }
+    #main { width: 1fr; }
+    #log { height: 1fr; padding: 1 2; }
     #log Markdown { margin: 0 0 1 0; }
-    #prompt { dock: bottom; margin: 0 1 1 1; }
+    #prompt { margin: 0 1 1 1; }
     """
 
     BINDINGS = [
         ("escape", "cancel", "Stop generating"),
+        ("ctrl+n", "new_conversation", "New"),
         ("ctrl+o", "model_picker", "Model"),
         ("ctrl+c", "quit", "Quit"),
     ]
@@ -52,24 +55,31 @@ class ChatApp(App[None]):
         self.store: Store | None = None
         self.model_name = "base"
         self.conversation_id: int | None = None
+        self._project_id: int | None = None
+        self._conversation_ids: list[int] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield VerticalScroll(id="log")
-        yield WaitingIndicator(id="waiting")
-        yield Input(placeholder="Message bpx…   (/model to switch · /help)", id="prompt")
+        with Horizontal():
+            yield ListView(id="sidebar")
+            with Vertical(id="main"):
+                yield VerticalScroll(id="log")
+                yield WaitingIndicator(id="waiting")
+                yield Input(placeholder="Message bpx…   (/new · /model · /help)", id="prompt")
         yield Footer()
 
     async def on_mount(self) -> None:
         self.store = Store.open()
-        project_id = self.store.default_project_id()
-        conversations = self.store.list_conversations(project_id)
+        self._project_id = self.store.default_project_id()
+        conversations = self.store.list_conversations(self._project_id)
         conversation_id = (
             conversations[0].id
             if conversations
-            else self.store.create_conversation(project_id, self.model_name)
+            else self.store.create_conversation(self._project_id, self.model_name)
         )
         await self._load_conversation(conversation_id)
+        await self._refresh_sidebar()
+        self.query_one("#prompt", Input).focus()
 
     def on_unmount(self) -> None:
         if self.store is not None:
@@ -115,6 +125,19 @@ class ChatApp(App[None]):
         log.scroll_end(animate=False)
         self._update_status()
 
+    async def _refresh_sidebar(self) -> None:
+        """Rebuild the conversation list (newest first) and re-highlight the active one."""
+        assert self.store is not None and self._project_id is not None
+        conversations = self.store.list_conversations(self._project_id)
+        self._conversation_ids = [c.id for c in conversations]
+        sidebar = self.query_one("#sidebar", ListView)
+        await sidebar.clear()
+        for conversation in conversations:
+            await sidebar.append(ListItem(Label(conversation.title or DEFAULT_TITLE)))
+        # Setting .index highlights without emitting Selected, so this won't reload.
+        if self.conversation_id in self._conversation_ids:
+            sidebar.index = self._conversation_ids.index(self.conversation_id)
+
     def _update_status(self) -> None:
         """Status badge (Header sub-title): active model · conversation title."""
         if self.store is None or self.conversation_id is None:
@@ -123,6 +146,40 @@ class ChatApp(App[None]):
         title = conversation.title if conversation is not None else ""
         self.sub_title = f"{self.model_name}  ·  {title}"
 
+    # -- conversation switching / CRUD --
+    async def on_list_view_selected(self, event: ListView.Selected) -> None:
+        if event.list_view.id != "sidebar":
+            return  # ignore selections from other list views (e.g. the model picker)
+        index = event.list_view.index
+        if index is None:
+            return
+        conversation_id = self._conversation_ids[index]
+        if conversation_id != self.conversation_id:
+            await self._load_conversation(conversation_id)
+        self.query_one("#prompt", Input).focus()
+
+    async def action_new_conversation(self) -> None:
+        assert self.store is not None and self._project_id is not None
+        conversation_id = self.store.create_conversation(self._project_id, self.model_name)
+        await self._load_conversation(conversation_id)
+        await self._refresh_sidebar()
+        self.query_one("#prompt", Input).focus()
+
+    async def action_delete_conversation(self) -> None:
+        assert self.store is not None and self._project_id is not None
+        if self.conversation_id is None:
+            return
+        self.store.delete_conversation(self.conversation_id)
+        remaining = self.store.list_conversations(self._project_id)
+        next_id = (
+            remaining[0].id
+            if remaining
+            else self.store.create_conversation(self._project_id, self.model_name)
+        )
+        await self._load_conversation(next_id)
+        await self._refresh_sidebar()
+        self.query_one("#prompt", Input).focus()
+
     # -- send / generate --
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value.strip()
@@ -130,16 +187,17 @@ class ChatApp(App[None]):
             return
         event.input.value = ""
         if text.startswith("/"):
-            self._handle_command(text)
+            await self._handle_command(text)
             return
         self.store.add_message(self.conversation_id, "user", text)
         self.store.touch(self.conversation_id)
         self._maybe_set_title(text)
         await self._mount(self._user_md(text))
+        await self._refresh_sidebar()
         self.generate()
 
-    # -- slash commands & model switching --
-    def _handle_command(self, text: str) -> None:
+    # -- slash commands --
+    async def _handle_command(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
         command = parts[0].lower() if parts else ""
         arg = parts[1].strip() if len(parts) > 1 else ""
@@ -148,12 +206,20 @@ class ChatApp(App[None]):
                 self._switch_model(arg)
             else:
                 self.action_model_picker()
+        elif command == "new":
+            await self.action_new_conversation()
+        elif command in ("delete", "del", "rm"):
+            await self.action_delete_conversation()
         elif command in ("quit", "q", "exit"):
             self.exit()
         elif command == "help":
             self.notify(
-                "/model [name] · /help · /quit", title="Commands", timeout=6
+                "/new · /delete · /model [name] · /help · /quit",
+                title="Commands",
+                timeout=6,
             )
+        elif command in ("project", "rag", "search", "memory"):
+            self.notify(f"/{command} arrives in a later phase.")
         else:
             self.notify(f"Unknown command: /{command}", severity="warning")
 
