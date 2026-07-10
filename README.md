@@ -10,7 +10,8 @@ Full design in [PLAN.md](PLAN.md); working rules in [CLAUDE.md](CLAUDE.md).
 
 Phase 1 core complete: a conversation **sidebar** (create/switch/remove), SQLite-persisted
 chats with resume + full scrollback (**R3/R4**), a waiting animation, and runtime model
-switching (`qwen ↔ gemma` = **R5**). Next: Phase 2 (fine-tuned personas + keyword router).
+switching (`qwen ↔ gemma` = **R5**). Phase 2 in progress: the keyword router auto-switches to
+the British/Scottish personas (the persona models are placeholders until the LoRAs are trained).
 
 ## Requirements
 
@@ -26,7 +27,8 @@ uv run bpx         # launch the TUI
 
 In the app: **Enter** sends · **Esc** stops · **Ctrl+N** new chat · **Ctrl+C** quits. Slash
 commands: `/new`, `/delete`, `/model [name]` (no arg opens a picker; also **Ctrl+O**),
-`/help`, `/quit`. The left sidebar lists conversations — select one to switch.
+`/help`, `/quit`. The left sidebar lists conversations — select one to switch. British/Scottish
+slang auto-switches persona (e.g. "aye, it's dreich"); a manual `/model` pins the conversation.
 
 Dev loop: `uv run textual run --dev bpx.app` in one terminal, `uv run textual console` in another.
 

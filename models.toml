@@ -25,3 +25,26 @@ model_id = "gemma3:1b"
 api_key_env = ""
 is_persona = false
 keywords = []
+
+# Persona placeholders — the keyword router (router/keywords.py) auto-switches to these.
+# model_id points at qwen3.5:4b UNTIL the LoRA adapters are trained (Phase 2); then it
+# becomes "bpx-british" / "bpx-scottish" (a one-line edit each). Lexicons live in the
+# router module, so keywords[] here stays empty.
+
+[[models]]
+name = "british"
+provider = "ollama"
+endpoint = "http://localhost:11434/v1"
+model_id = "qwen3.5:4b"
+api_key_env = ""
+is_persona = true
+keywords = []
+
+[[models]]
+name = "scottish"
+provider = "ollama"
+endpoint = "http://localhost:11434/v1"
+model_id = "qwen3.5:4b"
+api_key_env = ""
+is_persona = true
+keywords = []

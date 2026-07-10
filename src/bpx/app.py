@@ -4,7 +4,8 @@ See PLAN.md §5, §9. A left sidebar lists conversations (newest first); the rig
 the streaming chat log + input. Conversations are created/switched/removed (R4) and each
 resumes with full scrollback (R3). Slash commands drive it: `/new`, `/delete`, `/model`,
 `/help`, `/quit`. The active model is pinned per conversation and shown in the Header badge
-(R5). `client_factory` is injectable so tests can supply a fake streaming client (offline).
+(R5). British/Scottish keywords auto-switch the persona (§8) unless a manual `/model` has
+pinned the conversation. `client_factory` is injectable so tests can supply a fake client.
 """
 
 from __future__ import annotations
@@ -19,11 +20,18 @@ from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Ma
 
 from .llm import LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
+from .router.keywords import detect
 from .store import Store
 from .widgets.model_picker import ModelPicker
 from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
+
+# Toast shown when the keyword router auto-switches persona (§8).
+_SWITCH_TOASTS = {
+    "british": "Switching to British mode, mate 🇬🇧",
+    "scottish": "Switching to Scottish mode, aye 🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+}
 
 
 class ChatApp(App[None]):
@@ -95,6 +103,10 @@ class ChatApp(App[None]):
         marker = " _(stopped)_" if stopped else ""
         return f"**{model}**{marker}\n\n{content or '…'}"
 
+    @staticmethod
+    def _event_md(content: str) -> str:
+        return f"— _{content}_ —"
+
     async def _mount(self, markdown: str) -> Markdown:
         widget = Markdown(markdown)
         await self.query_one("#log", VerticalScroll).mount(widget)
@@ -112,6 +124,8 @@ class ChatApp(App[None]):
         for message in self.store.list_messages(conversation_id):
             if message.role == "user":
                 await log.mount(Markdown(self._user_md(message.content)))
+            elif message.role == "event":
+                await log.mount(Markdown(self._event_md(message.content)))
             else:
                 await log.mount(
                     Markdown(
@@ -193,8 +207,26 @@ class ChatApp(App[None]):
         self.store.touch(self.conversation_id)
         self._maybe_set_title(text)
         await self._mount(self._user_md(text))
+        await self._maybe_auto_switch(text)
         await self._refresh_sidebar()
         self.generate()
+
+    async def _maybe_auto_switch(self, text: str) -> None:
+        """Keyword router (§8): switch persona on a lexicon hit, unless this conversation
+        has been pinned by a manual /model. Logs the switch into the chat so history is honest."""
+        assert self.store is not None and self.conversation_id is not None
+        conversation = self.store.get_conversation(self.conversation_id)
+        if conversation is None or not conversation.auto_switch:
+            return
+        persona = detect(text)
+        if persona is None or persona == self.model_name or persona not in self.registry.names():
+            return
+        self.model_name = persona
+        self.store.set_model(self.conversation_id, persona)
+        self._update_status()
+        self.notify(_SWITCH_TOASTS.get(persona, f"Switching to {persona}"))
+        self.store.add_message(self.conversation_id, "event", f"auto-switched to {persona}")
+        await self._mount(self._event_md(f"auto-switched to {persona}"))
 
     # -- slash commands --
     async def _handle_command(self, text: str) -> None:
@@ -233,8 +265,9 @@ class ChatApp(App[None]):
         assert self.conversation_id is not None and self.store is not None
         self.model_name = name
         self.store.set_model(self.conversation_id, name)
+        self.store.set_auto_switch(self.conversation_id, False)  # manual choice pins (§8)
         self._update_status()
-        self.notify(f"Model → {name}")
+        self.notify(f"Model → {name} (auto-switch off)")
 
     def action_model_picker(self) -> None:
         self.push_screen(
@@ -259,7 +292,7 @@ class ChatApp(App[None]):
         prompt = [
             Message(m.role, m.content)
             for m in self.store.list_messages(conversation_id)
-            if m.content
+            if m.content and m.role in ("user", "assistant")  # skip event/log rows
         ]
         client = self._client_factory(self.registry.get(self.model_name))
         assistant_id = self.store.add_message(

@@ -73,8 +73,18 @@ def _migration_002(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE messages SET model_name = 'qwen' WHERE model_name = 'base'")
 
 
+def _migration_003(conn: sqlite3.Connection) -> None:
+    # Per-conversation keyword auto-switch flag (§8). Manual /model pins a conversation by
+    # turning this off. Guarded so the ALTER is safe if the column already exists.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+    if "auto_switch" not in columns:
+        conn.execute(
+            "ALTER TABLE conversations ADD COLUMN auto_switch INTEGER NOT NULL DEFAULT 1"
+        )
+
+
 # Ordered; MIGRATIONS[i] upgrades version i -> i+1.
-MIGRATIONS = [_migration_001, _migration_002]
+MIGRATIONS = [_migration_001, _migration_002, _migration_003]
 
 
 # --- row types ------------------------------------------------------------------
@@ -88,6 +98,7 @@ class Conversation:
     model_name: str
     created_at: str
     updated_at: str
+    auto_switch: bool = True
 
 
 @dataclass(frozen=True)
@@ -193,6 +204,13 @@ class Store:
                 (model_name, conversation_id),
             )
 
+    def set_auto_switch(self, conversation_id: int, enabled: bool) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE conversations SET auto_switch = ? WHERE id = ?",
+                (int(enabled), conversation_id),
+            )
+
     def touch(self, conversation_id: int) -> None:
         with self._conn:
             self._conn.execute(
@@ -243,6 +261,7 @@ class Store:
             model_name=row["model_name"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            auto_switch=bool(row["auto_switch"]),
         )
 
     @staticmethod
