@@ -9,7 +9,7 @@
 # streaming loop runs today. Reconcile the base tag before Phase 2 / gate G1 (§7.1).
 
 [[models]]
-name = "base"
+name = "qwen"
 provider = "ollama"
 endpoint = "http://localhost:11434/v1"
 model_id = "qwen3.5:4b"

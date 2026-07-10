@@ -56,7 +56,7 @@ Decisions with real switching costs, settled 2026-07-09:
 
 | Registry name | Base | Role | Where |
 |---|---|---|---|
-| `base` | Qwen3-8B Q4_K_M | Default helpful assistant | Ollama, local |
+| `qwen` | Qwen3-8B Q4_K_M | Default helpful assistant | Ollama, local |
 | `gemma` | Gemma 4–12B class | Second family → R5 unambiguous | Ollama, local |
 | `british` | Qwen3-8B + British LoRA | Persona (fine-tuned #1) | Ollama `ADAPTER`, local |
 | `scottish` | Qwen3-8B + Scottish LoRA | Persona (fine-tuned #2) | Ollama `ADAPTER`, local |
@@ -161,7 +161,7 @@ Unsloth (fallback PEFT+TRL SFTTrainer); 4-bit NF4 frozen base, bf16 compute; sta
 ## 9. TUI, persistence, memory
 
 - **Look:** Claude-Code-inspired dark theme, rounded borders, footer keybindings, command palette, slash commands (`/new /model /project /rag /search /memory /quit`).
-- **Pixel art:** frame-based widget (multi-line strings + Rich color markup, half-block ▀▄ characters for 2× vertical resolution), timer-driven during generation. Three sets: neutral (base/gemma), royal figure + speech bubble echoing a salient prompt word (british), angry bagpiper by a pub + grumpy bubble (scottish).
+- **Pixel art:** frame-based widget (multi-line strings + Rich color markup, half-block ▀▄ characters for 2× vertical resolution), timer-driven during generation. Three sets: neutral (qwen/gemma), royal figure + speech bubble echoing a salient prompt word (british), angry bagpiper by a pub + grumpy bubble (scottish).
 - **Persistence:** SQLite tables `projects / conversations / messages / memories / schema_version`. Start/stop/resume: streaming cancellable, partials saved, reopening restores full scrollback (R3/R4).
 - **Memory (R6):** background LLM call extracts durable facts every N messages into project-scoped `memories`; top-k injected into the system prompt of chats in that project; `/memory` lists and deletes. Simple, inspectable, demoable.
 
@@ -228,7 +228,7 @@ Planned chapters (≈ one per phase deliverable):
 | Phase | Dates | Deliverables (each phase ends with its handbook chapter(s)) |
 |---|---|---|
 | 0 — Scaffold | Jul 9–13 | Repo init (PLAN.md = first commit), uv project, CLAUDE.md, Ollama + qwen3:8b + Gemma pulled, minimal streaming chat loop. *Ch. 00–01 started* |
-| 1 — Required core | Jul 14–26 | Conversations CRUD + SQLite + migrations, resume/cancel, scrollback, model registry + manual switching (base↔gemma working = R5 done early). *Ch. 01–03* |
+| 1 — Required core | Jul 14–26 | Conversations CRUD + SQLite + migrations, resume/cancel, scrollback, model registry + manual switching (qwen↔gemma working = R5 done early). *Ch. 01–03* |
 | 2 — Fine-tuning | Jul 27–Aug 16 | **G1 gate first.** Seeds + prompt bank; teacher generation + filtering; QLoRA ×2; eval table; GGUF → Ollama personas; keyword router. *Ch. 04–07* |
 | 3 — Memory + electives | Aug 10–30 (overlaps 2) | Project memory; adaptive RAG; agentic web search. *Ch. 08–10* |
 | 4 — Flair & polish | Aug 24–Sep 4 | Pixel-art animations, `bpx setup`, cross-platform check (macOS + Linux min.), README. *Ch. 11* |
@@ -236,7 +236,7 @@ Planned chapters (≈ one per phase deliverable):
 
 ## 16. Video demo (R8) — outline
 
-Screen recording (macOS + OBS/QuickTime): launch via `uvx` one-liner → new project + chat → scrollback → manual model switch base↔gemma → keyword auto-switch to British (pixel art changes, speech bubble) → Scottish trigger (bagpiper) → resume an old conversation → project memory recall across chats → RAG over a user PDF (real-world use case: e.g. querying a Digital Health course paper) → agentic web search question → wrap-up. Real-world use-case requirement is covered by the RAG-over-own-documents segment.
+Screen recording (macOS + OBS/QuickTime): launch via `uvx` one-liner → new project + chat → scrollback → manual model switch qwen↔gemma → keyword auto-switch to British (pixel art changes, speech bubble) → Scottish trigger (bagpiper) → resume an old conversation → project memory recall across chats → RAG over a user PDF (real-world use case: e.g. querying a Digital Health course paper) → agentic web search question → wrap-up. Real-world use-case requirement is covered by the RAG-over-own-documents segment.
 
 ## 17. Risks
 

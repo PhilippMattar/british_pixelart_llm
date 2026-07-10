@@ -33,7 +33,7 @@ class ModelSpec:
 
 # Fallback registry so the app runs even before a models.toml is present.
 _DEFAULT_MODELS: tuple[ModelSpec, ...] = (
-    ModelSpec("base", "ollama", "http://localhost:11434/v1", "qwen3.5:4b"),
+    ModelSpec("qwen", "ollama", "http://localhost:11434/v1", "qwen3.5:4b"),
     ModelSpec("gemma", "ollama", "http://localhost:11434/v1", "gemma3:1b"),
 )
 

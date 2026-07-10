@@ -8,8 +8,8 @@ dist/
 .ruff_cache/
 .mypy_cache/
 
-# Virtual envs / uv
-.venv/
+# Virtual envs / uv — .venv* also catches iCloud conflict copies (".venv 2", …)
+.venv*
 venv/
 
 # Environment / secrets

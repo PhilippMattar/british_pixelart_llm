@@ -31,3 +31,4 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["src"]  # import bpx from src directly, independent of the editable install

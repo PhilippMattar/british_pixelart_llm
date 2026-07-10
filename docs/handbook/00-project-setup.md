@@ -20,7 +20,7 @@ multi-provider support are never retrofitted.
 - `src/bpx/llm.py` — `LLMClient`: OpenAI-compatible, async streaming, cancellable.
 - `src/bpx/registry.py` — `ModelSpec` + `Registry` load `models.toml`; `client_for()`
   builds a client from a spec. Ships a hardcoded fallback so the app runs without the file.
-- `models.toml` — the registry (`base` + `gemma`); adding a model is data-only.
+- `models.toml` — the registry (`qwen` + `gemma`); adding a model is data-only.
 - `src/bpx/app.py` — `ChatApp`: scrollable log, input, streamed replies, Esc-to-stop.
 - `src/bpx/cli.py` + `setup.py` — entry point and a `bpx setup` environment check.
 - `tests/` — registry tests + headless `App.run_test()` compose tests.
@@ -36,10 +36,10 @@ multi-provider support are never retrofitted.
 
 ## Resources
 
-- uv — https://docs.astral.sh/uv/
-- Textual tutorial — https://textual.textualize.io/tutorial/
-- Ollama OpenAI compatibility — https://github.com/ollama/ollama/blob/main/docs/openai.md
-- Claude Code — https://docs.claude.com/en/docs/claude-code
+- uv — <https://docs.astral.sh/uv/>
+- Textual tutorial — <https://textual.textualize.io/tutorial/>
+- Ollama OpenAI compatibility — <https://github.com/ollama/ollama/blob/main/docs/openai.md>
+- Claude Code — <https://docs.claude.com/en/docs/claude-code>
 
 ## Gotchas
 
