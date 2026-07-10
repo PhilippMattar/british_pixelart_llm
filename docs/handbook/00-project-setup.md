@@ -36,10 +36,10 @@ multi-provider support are never retrofitted.
 
 ## Resources
 
-- uv — https://docs.astral.sh/uv/
-- Textual tutorial — https://textual.textualize.io/tutorial/
-- Ollama OpenAI compatibility — https://github.com/ollama/ollama/blob/main/docs/openai.md
-- Claude Code — https://docs.claude.com/en/docs/claude-code
+- uv — <https://docs.astral.sh/uv/>
+- Textual tutorial — <https://textual.textualize.io/tutorial/>
+- Ollama OpenAI compatibility — <https://github.com/ollama/ollama/blob/main/docs/openai.md>
+- Claude Code — <https://docs.claude.com/en/docs/claude-code>
 
 ## Gotchas
 

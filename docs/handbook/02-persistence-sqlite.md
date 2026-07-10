@@ -44,11 +44,11 @@ additions like the `memories` table (Phase 3) are a one-function change, not a r
 
 ## Resources
 
-- Python `sqlite3` — https://docs.python.org/3/library/sqlite3.html
-- sqlite3 transaction control — https://docs.python.org/3/library/sqlite3.html#transaction-control
-- SQLite foreign keys — https://www.sqlite.org/foreignkeys.html
-- Schema-migration pattern (concept) — https://martinfowler.com/articles/evodb.html
-- platformdirs — https://platformdirs.readthedocs.io/
+- Python `sqlite3` — <https://docs.python.org/3/library/sqlite3.html>
+- sqlite3 transaction control — <https://docs.python.org/3/library/sqlite3.html#transaction-control>
+- SQLite foreign keys — <https://www.sqlite.org/foreignkeys.html>
+- Schema-migration pattern (concept) — <https://martinfowler.com/articles/evodb.html>
+- platformdirs — <https://platformdirs.readthedocs.io/>
 
 ## Gotchas
 

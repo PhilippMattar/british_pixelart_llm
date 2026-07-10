@@ -43,10 +43,10 @@ column added in the persistence step.
 
 ## Resources
 
-- Ollama OpenAI compatibility — https://github.com/ollama/ollama/blob/main/docs/openai.md
-- OpenAI Chat Completions — https://platform.openai.com/docs/api-reference/chat
-- Textual modal screens — https://textual.textualize.io/guide/screens/#modal-screens
-- Textual ListView — https://textual.textualize.io/widgets/list_view/
+- Ollama OpenAI compatibility — <https://github.com/ollama/ollama/blob/main/docs/openai.md>
+- OpenAI Chat Completions — <https://platform.openai.com/docs/api-reference/chat>
+- Textual modal screens — <https://textual.textualize.io/guide/screens/#modal-screens>
+- Textual ListView — <https://textual.textualize.io/widgets/list_view/>
 
 ## Gotchas
 
