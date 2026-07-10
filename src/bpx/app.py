@@ -53,7 +53,7 @@ class ChatApp(App[None]):
         self.registry = Registry.load()
         self._client_factory = client_factory
         self.store: Store | None = None
-        self.model_name = "base"
+        self.model_name = "qwen"
         self.conversation_id: int | None = None
         self._project_id: int | None = None
         self._conversation_ids: list[int] = []

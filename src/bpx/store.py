@@ -66,8 +66,15 @@ def _migration_001(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX idx_conversations_project ON conversations(project_id)")
 
 
+def _migration_002(conn: sqlite3.Connection) -> None:
+    # The default model's registry name changed from "base" to "qwen"; rename saved rows so
+    # existing conversations still resolve to a real model instead of raising on generate.
+    conn.execute("UPDATE conversations SET model_name = 'qwen' WHERE model_name = 'base'")
+    conn.execute("UPDATE messages SET model_name = 'qwen' WHERE model_name = 'base'")
+
+
 # Ordered; MIGRATIONS[i] upgrades version i -> i+1.
-MIGRATIONS = [_migration_001]
+MIGRATIONS = [_migration_001, _migration_002]
 
 
 # --- row types ------------------------------------------------------------------

@@ -42,7 +42,7 @@ async def test_app_composes_and_opens_conversation(db):
     async with app.run_test():
         assert app.query_one("#prompt", Input) is not None
         assert app.query_one("#log") is not None
-        assert app.model_name == "base"
+        assert app.model_name == "qwen"
         assert app.conversation_id is not None
 
 
@@ -113,7 +113,7 @@ async def test_unknown_model_ignored(db):
     app = ChatApp(client_factory=_factory())
     async with app.run_test() as pilot:
         await _command(app, pilot, "/model nope")
-        assert app.model_name == "base"  # unchanged
+        assert app.model_name == "qwen"  # unchanged
 
 
 async def test_switched_model_used_for_next_reply(db):

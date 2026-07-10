@@ -3,7 +3,7 @@
 ## Goal
 
 Switch the generating model at runtime between at least two genuinely different models
-(`base` = Qwen, `gemma` = Gemma), with the choice pinned per conversation and shown as a
+(`qwen`, `gemma` — two different families), with the choice pinned per conversation and shown as a
 status badge — satisfying R5 early, before any fine-tuning.
 
 ## Why it exists
@@ -55,6 +55,6 @@ column added in the persistence step.
   so they feel slow — switch to `gemma3:1b` for snappy replies. This is why the waiting
   animation matters.
 - `query_one(ModelPicker)` fails while the modal is open — it's `app.screen`, not a child.
-- The Phase-0 `models.toml` still points `base` at an installed tag, **not** the plan's locked
+- The Phase-0 `models.toml` still points `qwen` at an installed tag, **not** the plan's locked
   persona base `qwen3:8b`; reconcile before Phase 2 / gate G1 (PLAN.md §7.1).
 - Keep the repo out of iCloud-synced folders — conflicted `.venv` copies break `uv`.

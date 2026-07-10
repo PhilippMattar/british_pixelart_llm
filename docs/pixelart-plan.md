@@ -10,7 +10,7 @@ with one art set per persona and honest state signalling:
 
 | Persona (registry)   | Scene (PLAN.md §9)                                            |
 |----------------------|---------------------------------------------------------------|
-| neutral (base/gemma) | Non-persona scene — e.g. desk with CRT terminal, blinking cursor, steaming mug |
+| neutral (qwen/gemma) | Non-persona scene — e.g. desk with CRT terminal, blinking cursor, steaming mug |
 | `british`            | Royal figure waving + speech bubble echoing a salient prompt word |
 | `scottish`           | Angry bagpiper outside a pub + grumpy speech bubble           |
 

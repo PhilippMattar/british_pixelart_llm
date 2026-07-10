@@ -10,7 +10,7 @@ Full design in [PLAN.md](PLAN.md); working rules in [CLAUDE.md](CLAUDE.md).
 
 Phase 1 core complete: a conversation **sidebar** (create/switch/remove), SQLite-persisted
 chats with resume + full scrollback (**R3/R4**), a waiting animation, and runtime model
-switching (`base ↔ gemma` = **R5**). Next: Phase 2 (fine-tuned personas + keyword router).
+switching (`qwen ↔ gemma` = **R5**). Next: Phase 2 (fine-tuned personas + keyword router).
 
 ## Requirements
 
