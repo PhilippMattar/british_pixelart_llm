@@ -1,0 +1,25 @@
+# Shared config for the Phase-2 training pipeline (HPI SCI HPC). `source` before running.
+# Jobs run in Enroot/Pyxis containers on Slurm; see training/README.md.
+#
+# >>> FILL IN the two TODOs (or export them in your shell) before submitting jobs. <<<
+
+export BPX_ACCOUNT="${BPX_ACCOUNT:-TODO_your_slurm_account}"        # sbatch -A / --account
+export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-/sc/projects/TODO_group/bpx}"  # shared NVMe workspace
+
+# Partitions (HPI SCI HPC — set --time explicitly; default is 8h)
+export BPX_PARTITION_SHORT="${BPX_PARTITION_SHORT:-gpu-shortrun}"   # 1h  — G1 smoke
+export BPX_PARTITION_BATCH="${BPX_PARTITION_BATCH:-gpu-batch}"      # 7d  — real training / teacher gen
+
+# Pyxis/Enroot container: NGC PyTorch has CUDA + torch prebuilt for H100/Blackwell.
+export BPX_IMAGE="${BPX_IMAGE:-nvcr.io#nvidia/pytorch:25.01-py3}"
+
+# Models
+export BPX_BASE_HF="${BPX_BASE_HF:-Qwen/Qwen3-8B}"                  # unquantized student base (§3)
+export BPX_OLLAMA_BASE_TAG="${BPX_OLLAMA_BASE_TAG:-qwen3:8b}"       # matching Ollama serve tag
+
+# Derived paths on the shared FS (/sc/projects — visible on all nodes)
+export BPX_BASE_DIR="$BPX_PROJECT_DIR/models/qwen3-8b"             # pre-staged base weights
+export BPX_WORK_DIR="$BPX_PROJECT_DIR/work"                        # adapters, dummy data, gguf, logs
+export BPX_VENV="$BPX_PROJECT_DIR/venv"                            # training deps (built by setup_env.sh)
+export LLAMA_CPP="$BPX_PROJECT_DIR/llama.cpp"                      # for GGUF adapter conversion
+export HF_HOME="$BPX_PROJECT_DIR/hf-cache"                         # HF cache on shared NVMe
