@@ -1,0 +1,15 @@
+# Extra training deps installed on top of the NGC PyTorch container (env/setup_env.sh).
+# torch + CUDA come from the container image — do NOT pin torch here (avoids a mismatch).
+# The G1 gate uses the transparent transformers+peft+trl+bitsandbytes stack; unsloth is
+# the faster option for the real QLoRA runs (Ch. 05) — uncomment when moving past G1.
+
+transformers>=4.46
+peft>=0.13
+trl>=0.12
+datasets>=3.0
+accelerate>=1.0
+bitsandbytes>=0.44
+huggingface_hub>=0.26
+sentencepiece
+gguf>=0.10            # required by llama.cpp convert_lora_to_gguf.py
+# unsloth            # faster QLoRA for the real runs; pin torch/transformers to its matrix

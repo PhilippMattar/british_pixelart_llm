@@ -1,0 +1,8 @@
+# G1 gate: serve the dummy LoRA over the base to verify the Ollama ADAPTER path.
+#   1) rsync  "$BPX_CLUSTER_SSH:$BPX_WORK_DIR/g1.gguf"  ->  models/adapters/g1.gguf
+#   2) ollama pull qwen3:8b            # the base, if not already present
+#   3) ollama create bpx-g1 -f models/Modelfile.g1
+#   4) ollama run bpx-g1 "How's the weather?"   # expect coherent, faintly British output
+# PASS => the Qwen3-8B GGUF-LoRA path works; proceed with real training (§7.2).
+FROM qwen3:8b
+ADAPTER ./adapters/g1.gguf

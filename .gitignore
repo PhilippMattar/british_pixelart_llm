@@ -26,5 +26,12 @@ venv/
 # only the collection/cleaning scripts. Generated JSONL under training/data/ IS committed.
 training/seeds/raw/
 
-# Course-provided prompt PDF — not ours to redistribute publicly (PLAN.md §3 data policy)
+# Course-provided PDFs — not ours to redistribute publicly (PLAN.md §3 data policy)
 Intelligent Agents Project Prompt.pdf
+251204_ITS4DH_SCI_WiSe2025.opt.pdf
+
+# Model artifacts: GGUF adapters are produced on the cluster and copied back; keep binaries
+# out of git during dev (force-add the final personas for the hand-in). Base weights + HF
+# cache live on /sc/projects, never the repo.
+models/adapters/*.gguf
+training/work/
