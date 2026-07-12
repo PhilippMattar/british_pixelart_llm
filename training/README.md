@@ -39,9 +39,10 @@ bash training/submit_g1.sh              # sbatch on gpu-shortrun; watch: squeue 
 ### 3. Verify locally (needs Ollama)
 
 ```bash
-rsync <cluster>:$BPX_WORK_DIR/g1.gguf models/adapters/g1.gguf
+source training/config.sh                 # for $BPX_CLUSTER_SSH and $BPX_WORK_DIR
+rsync "$BPX_CLUSTER_SSH:$BPX_WORK_DIR/g1.gguf" models/adapters/g1.gguf
 ollama create bpx-g1 -f models/Modelfile.g1
-ollama run bpx-g1 "How's the weather?"  # coherent + faintly British => PASS
+ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
 ```
 
 ## Files
