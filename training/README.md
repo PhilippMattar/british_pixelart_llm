@@ -85,6 +85,13 @@ ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
   by unpacking ~60 layers and running `enroot-mksquashovlfs`, which is host-RAM hungry. With
   Slurm's default memory you get killed during import (`error code: 137`, `oom_kill event`) —
   before your code runs at all. `-c 8 --mem=64G` is enough for the NGC PyTorch image.
+- **Your conda leaks into the container.** Enroot mounts `$HOME`, so an interactive
+  (`--pty bash`) or login (`bash -lc`) shell sources `~/.bashrc`, activates your conda `base`,
+  and shadows the container's python — you get `(base)` in the prompt and
+  `ModuleNotFoundError: No module named 'torch'` *inside the PyTorch image*. Use `bash -c`
+  (no rc files), or `conda deactivate` when poking around interactively. This matters most in
+  `setup_env.sh`: building the venv on conda's python instead of the container's would inherit
+  no torch and break training silently, so it now fails fast if torch isn't importable first.
 
 - **Offline by default**: only `setup_env.sh` and `download_weights.py` use the network
   (login node). Batch jobs set `HF_HUB_OFFLINE=1`. If compute nodes *do* have internet this

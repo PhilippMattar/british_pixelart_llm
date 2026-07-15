@@ -19,14 +19,20 @@ srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_INTERACTIVE" -N 1 --gpus=1 \
   --container-image="$BPX_IMAGE" \
   --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
   --container-workdir="$HERE" \
-  bash -lc '
+  bash -c '
     set -euo pipefail
     source config.sh
+    # NOTE: `bash -c`, NOT `bash -lc`. Enroot mounts $HOME, so a login/interactive shell
+    # sources ~/.bashrc, activates your conda base, and shadows the container python — the
+    # venv would then inherit conda (no torch) instead of the container. Fail fast if the
+    # python we are about to build on is not the container one.
+    echo "[setup] python: $(command -v python)"
+    python -c "import torch; print(\"[setup] container torch:\", torch.__version__)"
     python -m venv --system-site-packages "$BPX_VENV"   # inherit the container torch
     source "$BPX_VENV/bin/activate"
     pip install --no-cache-dir -U pip
     pip install --no-cache-dir -r env/requirements.txt
-    python -c "import transformers, peft, trl, bitsandbytes, gguf; print(\"train deps OK\")"
+    python -c "import torch, transformers, peft, trl, bitsandbytes, gguf; print(\"train deps OK\")"
   '
 
 # llama.cpp clone happens on the login node (has internet), not in the offline batch job.

@@ -18,10 +18,10 @@ mkdir -p "$BPX_WORK_DIR"
 srun --container-image="$BPX_IMAGE" \
      --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
      --container-workdir="$REPO" \
-     bash -lc '
+     bash -c '
        set -euo pipefail
        source config.sh
-       source "$BPX_VENV/bin/activate"
+       source "$BPX_VENV/bin/activate"   # must precede any python use (see env/setup_env.sh)
        export HF_HUB_OFFLINE=1
        python make_dummy_data.py --out "$BPX_WORK_DIR/g1_dummy.jsonl"
        python g1_smoke.py --base "$BPX_BASE_DIR" \
