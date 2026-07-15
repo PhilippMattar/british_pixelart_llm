@@ -17,6 +17,7 @@ export BPX_CLUSTER_SSH="${BPX_CLUSTER_SSH:-philipp.mattar@hpc.sci.hpi.de}"
 export BPX_PARTITION_INTERACTIVE="${BPX_PARTITION_INTERACTIVE:-gpu-interactive}"  # 8h — probe / env build
 export BPX_PARTITION_SHORT="${BPX_PARTITION_SHORT:-gpu-shortrun}"                 # 1d — G1 smoke job
 export BPX_PARTITION_BATCH="${BPX_PARTITION_BATCH:-gpu-batch}"                    # 7d — real training / teacher gen
+export BPX_PARTITION_CPU="${BPX_PARTITION_CPU:-cpu-interactive}"                  # 8h — image import (no GPU needed)
 
 # GPU selection. g1_smoke.py trains in bf16, which needs Ampere+ (CC>=8.0), and our container
 # is x86 — so pin A100. This rules out V100/2080Ti (no bf16) and GH200 (ARM, wrong arch), all
@@ -25,7 +26,11 @@ export BPX_PARTITION_BATCH="${BPX_PARTITION_BATCH:-gpu-batch}"                  
 export BPX_GPU_CONSTRAINT="${BPX_GPU_CONSTRAINT:-GPU_SKU:A100}"
 
 # Pyxis/Enroot container: NGC PyTorch has CUDA + torch prebuilt (x86; fine on A100).
-export BPX_IMAGE="${BPX_IMAGE:-nvcr.io#nvidia/pytorch:25.01-py3}"
+# Pulling this from the registry costs ~15 MINUTES of job runtime *every time* (60 layers,
+# ~20GB, unpack + mksquashfs). So env/import_image.sh imports it ONCE into a squashfs on the
+# shared FS, and every job mounts that file instead (pyxis takes a path) — starts in seconds.
+export BPX_IMAGE_URI="${BPX_IMAGE_URI:-nvcr.io#nvidia/pytorch:25.01-py3}"   # upstream; imported once
+export BPX_SQSH="${BPX_SQSH:-$BPX_PROJECT_DIR/images/pytorch-25.01.sqsh}"   # what jobs actually mount
 
 # Models
 export BPX_BASE_HF="${BPX_BASE_HF:-Qwen/Qwen3-8B}"                  # unquantized student base (§3)

@@ -8,6 +8,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"   # training/
 source "$HERE/config.sh"
 
+if [ ! -f "$BPX_SQSH" ]; then
+  echo "Missing $BPX_SQSH — run 'bash training/env/import_image.sh' first." >&2
+  exit 1
+fi
 mkdir -p "$BPX_PROJECT_DIR"
 
 # Build the venv inside the container (so its interpreter/torch match run time).
@@ -16,7 +20,7 @@ mkdir -p "$BPX_PROJECT_DIR"
 # OOM-killed (exit 137) before you ever reach a shell.
 srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_INTERACTIVE" -N 1 --gpus=1 \
   -C "$BPX_GPU_CONSTRAINT" -c 8 --mem=64G --time=01:00:00 \
-  --container-image="$BPX_IMAGE" \
+  --container-image="$BPX_SQSH" \
   --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
   --container-workdir="$HERE" \
   bash -c '

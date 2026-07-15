@@ -47,8 +47,9 @@ The scripts `mkdir -p` the workspace themselves; you don't create it.
 
 ```bash
 source training/config.sh
-bash   training/env/setup_env.sh        # venv (inherits container torch) + llama.cpp clone
-python training/download_weights.py     # pre-stage Qwen3-8B to $BPX_BASE_DIR (offline after this)
+bash   training/env/import_image.sh      # ONCE: registry -> $BPX_SQSH (~15-20 min, see gotchas)
+bash   training/env/setup_env.sh         # venv (inherits container torch) + llama.cpp clone
+python training/download_weights.py      # pre-stage Qwen3-8B to $BPX_BASE_DIR (offline after this)
 ```
 
 ### 2. Run G1 (batch, offline)
@@ -81,10 +82,14 @@ ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
 
 ## Notes / gotchas
 
-- **Always pass `--mem` and `-c` to any job that pulls a container.** Pyxis imports the image
-  by unpacking ~60 layers and running `enroot-mksquashovlfs`, which is host-RAM hungry. With
-  Slurm's default memory you get killed during import (`error code: 137`, `oom_kill event`) —
-  before your code runs at all. `-c 8 --mem=64G` is enough for the NGC PyTorch image.
+- **Never let a job pull from the registry.** Measured on this cluster: pyxis importing
+  `nvcr.io#nvidia/pytorch:25.01-py3` costs **~15 min of job runtime, every time** (60 layers,
+  ~20GB, unpack + mksquashfs) — a probe with `--time=00:15:00` was killed by its limit purely
+  on the import, and a 40-min probe took 36 min wall. `env/import_image.sh` imports it once to
+  `$BPX_SQSH`; jobs then mount that path and start in seconds.
+- **Always pass `--mem` and `-c` to any job that does import a container.** The import is
+  host-RAM hungry; with Slurm's default memory you get OOM-killed mid-import (`error code: 137`,
+  `oom_kill event`) before your code runs. `-c 8 --mem=64G` suffices.
 - **Your conda leaks into the container.** Enroot mounts `$HOME`, so an interactive
   (`--pty bash`) or login (`bash -lc`) shell sources `~/.bashrc`, activates your conda `base`,
   and shadows the container's python — you get `(base)` in the prompt and

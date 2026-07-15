@@ -17,7 +17,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"   # training/
 source "$REPO/config.sh"
 mkdir -p "$BPX_WORK_DIR"
 
-srun --container-image="$BPX_IMAGE" \
+srun --container-image="$BPX_SQSH" \
      --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
      --container-workdir="$REPO" \
      bash -c '
