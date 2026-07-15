@@ -11,8 +11,11 @@ source "$HERE/config.sh"
 mkdir -p "$BPX_PROJECT_DIR"
 
 # Build the venv inside the container (so its interpreter/torch match run time).
+# NOTE: --mem/-c are NOT optional. Pyxis imports the image by unpacking ~60 layers and
+# running enroot-mksquashovlfs, which is host-RAM hungry — the default allocation gets
+# OOM-killed (exit 137) before you ever reach a shell.
 srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_INTERACTIVE" -N 1 --gpus=1 \
-  -C "$BPX_GPU_CONSTRAINT" --time=00:40:00 \
+  -C "$BPX_GPU_CONSTRAINT" -c 8 --mem=64G --time=00:40:00 \
   --container-image="$BPX_IMAGE" \
   --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
   --container-workdir="$HERE" \

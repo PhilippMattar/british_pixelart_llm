@@ -81,6 +81,11 @@ ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
 
 ## Notes / gotchas
 
+- **Always pass `--mem` and `-c` to any job that pulls a container.** Pyxis imports the image
+  by unpacking ~60 layers and running `enroot-mksquashovlfs`, which is host-RAM hungry. With
+  Slurm's default memory you get killed during import (`error code: 137`, `oom_kill event`) —
+  before your code runs at all. `-c 8 --mem=64G` is enough for the NGC PyTorch image.
+
 - **Offline by default**: only `setup_env.sh` and `download_weights.py` use the network
   (login node). Batch jobs set `HF_HUB_OFFLINE=1`. If compute nodes *do* have internet this
   is just harmless caution.
