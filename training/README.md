@@ -43,13 +43,24 @@ $HOME/bpx-work/              <- BPX_PROJECT_DIR (weights, venv, work/ — never 
 
 The scripts `mkdir -p` the workspace themselves; you don't create it.
 
-### 1. Build the env + stage weights — run these ON THE LOGIN NODE
+### 1. Build the env + stage weights — run these on a RUN NODE
 
-> Every script below is a **login-node orchestrator**: it computes nothing itself, it submits
-> its own `srun`/`sbatch` and the heavy work lands on a compute node. **Do not wrap them in
-> `srun`** — a nested srun deadlocks (the outer step holds the allocation while the inner one
-> waits for it: `step creation temporarily disabled ... Requested nodes are busy`, forever).
-> They now refuse to run inside an allocation rather than hang.
+```bash
+ssh philipp.mattar@rx01.hpc.sci.hpi.de     # or rx02 — over the Scientific Compute VPN
+```
+
+> **Where these run — three nodes, don't conflate them:**
+>
+> | Node | Use | Gotcha |
+> |---|---|---|
+> | **login** (`lx01`) | ssh, `git`, file ops | **refuses `bash`/`python3`**: *"This command is not allowed on the login node!"* |
+> | **run** (`rx01`/`rx02`) | ← **these scripts live here**: helper scripts, automation, submitting jobs | 8 GiB RAM / 4 cores; no heavy compute |
+> | **compute** | the actual GPU work | reached *by* the scripts via `srun`/`sbatch` |
+>
+> Every script below only **orchestrates** — it submits its own `srun`/`sbatch`. So **don't
+> wrap them in `srun`**: a nested srun deadlocks (the outer step holds the allocation while the
+> inner waits for it — `step creation temporarily disabled ... Requested nodes are busy`,
+> forever). They refuse to run inside an allocation rather than hang.
 
 ```bash
 source training/config.sh
