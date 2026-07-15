@@ -2,9 +2,10 @@
 # G1 gate batch job (PLAN.md §7.1): dummy data -> QLoRA smoke -> GGUF adapter.
 # Submit via training/submit_g1.sh (it supplies -A and -p from config.sh).
 # Runs fully offline: env/setup_env.sh + download_weights.py must have run first.
+# -A / -p / -C come from submit_g1.sh (#SBATCH can't expand variables).
 #SBATCH --job-name=bpx-g1
+#SBATCH --nodes=1
 #SBATCH --gpus=1
-#SBATCH --constraint=GPU_MEM:80GB
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64gb
 #SBATCH --time=00:45:00

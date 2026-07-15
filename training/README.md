@@ -3,10 +3,15 @@
 Cluster-side scripts for the persona LoRAs (R7). Edited here, run on the **HPI Scientific
 Compute HPC** (Slurm + Enroot/Pyxis containers). See PLAN.md §6–§7.
 
-> **Cluster shape** (docs.sc.hpi.de): jobs run in **Pyxis/Enroot containers**, not a bare
-> env/module setup. GPUs via `--gpus=N` + `-C GPU_MEM:80GB` (H100 80GB). Partitions:
-> `gpu-shortrun` (1h), `gpu-batch` (7d). Shared NVMe at `/sc/projects/<group>/<project>`.
-> This adapts PLAN.md §7.2's "uv + module" assumption to containers.
+> **Cluster shape** (verified with `sinfo`/`sacctmgr`, 2026-07-12): jobs run in
+> **Pyxis/Enroot containers**, not a bare env/module setup — this adapts PLAN.md §7.2's
+> "uv + module" assumption. Partitions: `gpu-interactive` (8h) · `gpu-shortrun` (1d) ·
+> `gpu-batch` (7d). GPUs via `--gpus=N` + `-C GPU_SKU:A100`.
+>
+> **Why pin A100:** `g1_smoke.py` trains in bf16, which needs Ampere+ — but `gpu-interactive`
+> also holds V100/2080Ti (no bf16) and GH200 (ARM, incompatible with our x86 container). The
+> **H100s live only in the `aisc-*` partitions**, so don't chase `GPU_MEM:80GB` here; an A100
+> 40GB is ample for an 8B QLoRA. Storage is `$HOME` on shared NVMe (200GB quota).
 
 ## G1 gate — do this first (highest-risk item, §7.1)
 

@@ -8,14 +8,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"   # training/
 source "$HERE/config.sh"
 
-if [ "$BPX_ACCOUNT" = "TODO_your_slurm_account" ]; then
-  echo "Edit training/config.sh first: set BPX_ACCOUNT and BPX_PROJECT_DIR." >&2
-  exit 1
-fi
 mkdir -p "$BPX_PROJECT_DIR"
 
 # Build the venv inside the container (so its interpreter/torch match run time).
-srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_SHORT" --gpus=1 -C GPU_MEM:80GB --time=00:40:00 \
+srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_INTERACTIVE" -N 1 --gpus=1 \
+  -C "$BPX_GPU_CONSTRAINT" --time=00:40:00 \
   --container-image="$BPX_IMAGE" \
   --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
   --container-workdir="$HERE" \

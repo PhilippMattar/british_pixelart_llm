@@ -5,10 +5,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/config.sh"
 
-if [ "$BPX_ACCOUNT" = "TODO_your_slurm_account" ]; then
-  echo "Edit training/config.sh first: set BPX_ACCOUNT and BPX_PROJECT_DIR." >&2
-  exit 1
-fi
-
-sbatch -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_SHORT" "$HERE/slurm/g1.sbatch"
-echo "[submit] queued on $BPX_PARTITION_SHORT — watch with: squeue --me   /   tail -f bpx-g1_*.log"
+sbatch -A "$BPX_ACCOUNT" \
+       -p "$BPX_PARTITION_SHORT" \
+       -C "$BPX_GPU_CONSTRAINT" \
+       "$HERE/slurm/g1.sbatch"
+echo "[submit] queued on $BPX_PARTITION_SHORT ($BPX_GPU_CONSTRAINT)"
+echo "[submit] watch with: squeue --me   /   tail -f bpx-g1_*.log"
