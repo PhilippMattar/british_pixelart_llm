@@ -13,7 +13,9 @@
 #SBATCH --time=01:30:00
 #SBATCH --output=bpx-g1_%j.log
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"   # training/
+# Slurm executes a SPOOLED COPY of this file (/var/spool/slurmd/job*/slurm_script), so $0
+# tells us nothing about where the repo is — submit_g1.sh passes the real path instead.
+REPO="${BPX_TRAINING_DIR:?not set — submit via 'bash training/submit_g1.sh', not sbatch directly}"
 source "$REPO/config.sh"
 mkdir -p "$BPX_WORK_DIR"
 
