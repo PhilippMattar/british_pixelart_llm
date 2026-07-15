@@ -1,5 +1,10 @@
 # Extra training deps installed on top of the NGC PyTorch container (env/setup_env.sh).
 # torch + CUDA come from the container image — do NOT pin torch here (avoids a mismatch).
+#
+# Resolved on the cluster 2026-07-15: transformers 5.13.1, trl 1.8.0, peft 0.19.1,
+# bitsandbytes 0.49.2. g1_smoke.py is written against those major versions (TRL renamed
+# max_seq_length -> max_length and takes processing_class; transformers renamed
+# torch_dtype -> dtype). If you re-pin these, re-check that call.
 # The G1 gate uses the transparent transformers+peft+trl+bitsandbytes stack; unsloth is
 # the faster option for the real QLoRA runs (Ch. 05) — uncomment when moving past G1.
 

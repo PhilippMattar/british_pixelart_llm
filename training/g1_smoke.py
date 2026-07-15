@@ -52,7 +52,7 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(
         args.base,
         quantization_config=quant,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,   # transformers 5.x renamed torch_dtype -> dtype
         device_map="auto",
     )
     model = prepare_model_for_kbit_training(model)
@@ -86,6 +86,9 @@ def main() -> None:
     trainer = SFTTrainer(
         model=model,
         train_dataset=dataset,
+        # TRL >=1.0 takes the tokenizer as `processing_class`; pass it explicitly so nothing
+        # tries to re-fetch it (jobs run with HF_HUB_OFFLINE=1).
+        processing_class=tokenizer,
         args=SFTConfig(
             output_dir=args.out,
             max_steps=args.max_steps,
@@ -96,7 +99,7 @@ def main() -> None:
             warmup_ratio=0.05,
             bf16=True,
             logging_steps=5,
-            max_seq_length=args.seq_len,
+            max_length=args.seq_len,   # TRL >=1.0 renamed max_seq_length -> max_length
             dataset_text_field="text",
             report_to="none",
         ),
