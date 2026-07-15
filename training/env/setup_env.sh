@@ -15,7 +15,7 @@ mkdir -p "$BPX_PROJECT_DIR"
 # running enroot-mksquashovlfs, which is host-RAM hungry — the default allocation gets
 # OOM-killed (exit 137) before you ever reach a shell.
 srun -A "$BPX_ACCOUNT" -p "$BPX_PARTITION_INTERACTIVE" -N 1 --gpus=1 \
-  -C "$BPX_GPU_CONSTRAINT" -c 8 --mem=64G --time=00:40:00 \
+  -C "$BPX_GPU_CONSTRAINT" -c 8 --mem=64G --time=01:00:00 \
   --container-image="$BPX_IMAGE" \
   --container-mounts="$BPX_PROJECT_DIR:$BPX_PROJECT_DIR" \
   --container-workdir="$HERE" \

@@ -8,7 +8,9 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64gb
-#SBATCH --time=00:45:00
+# Generous: the container import alone costs ~15 min (60 layers, ~20GB) before our code
+# starts. gpu-shortrun allows 1 day, so there's no reason to cut this fine.
+#SBATCH --time=01:30:00
 #SBATCH --output=bpx-g1_%j.log
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"   # training/
