@@ -13,11 +13,14 @@ export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-$HOME/bpx-work}"
 # Format: user@access-node. Reach it over the *Scientific Compute* VPN (not the HPI VPN).
 export BPX_CLUSTER_SSH="${BPX_CLUSTER_SSH:-philipp.mattar@hpc.sci.hpi.de}"
 
-# Partitions — verified with `sinfo` on 2026-07-12. Always set --time explicitly (default 8h).
-export BPX_PARTITION_INTERACTIVE="${BPX_PARTITION_INTERACTIVE:-gpu-interactive}"  # 8h — probe / env build
-export BPX_PARTITION_SHORT="${BPX_PARTITION_SHORT:-gpu-shortrun}"                 # 1d — G1 smoke job
-export BPX_PARTITION_BATCH="${BPX_PARTITION_BATCH:-gpu-batch}"                    # 7d — real training / teacher gen
-export BPX_PARTITION_CPU="${BPX_PARTITION_CPU:-cpu-interactive}"                  # 8h — image import (no GPU needed)
+# Partitions — verified with `sinfo` + submission errors on the cluster. Always set --time.
+# CRITICAL: partitions are split by SUBMISSION TYPE, not just duration. The *-interactive and
+# gpu-shortrun partitions accept srun/salloc ONLY — sbatch is rejected ("Partition
+# gpu-shortrun is interactive-only"). Anything sbatch'd must go to a *-batch partition.
+export BPX_PARTITION_INTERACTIVE="${BPX_PARTITION_INTERACTIVE:-gpu-interactive}"  # 8h — srun only: probe / env build
+export BPX_PARTITION_SHORT="${BPX_PARTITION_SHORT:-gpu-shortrun}"                 # 1d — srun only (NOT sbatch-able)
+export BPX_PARTITION_BATCH="${BPX_PARTITION_BATCH:-gpu-batch}"                    # 7d — sbatch: G1 + real training
+export BPX_PARTITION_CPU="${BPX_PARTITION_CPU:-cpu-interactive}"                  # 8h — srun only: image import
 
 # GPU selection. g1_smoke.py trains in bf16, which needs Ampere+ (CC>=8.0), and our container
 # is x86 — so pin A100. This rules out V100/2080Ti (no bf16) and GH200 (ARM, wrong arch), all

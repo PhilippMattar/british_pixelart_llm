@@ -63,11 +63,17 @@ ssh philipp.mattar@rx01.hpc.sci.hpi.de     # or rx02 — over the Scientific Com
 > forever). They refuse to run inside an allocation rather than hang.
 
 ```bash
-source training/config.sh
-bash   training/env/import_image.sh      # ONCE: registry -> $BPX_SQSH (~15-20 min, see gotchas)
-bash   training/env/setup_env.sh         # venv (inherits container torch) + llama.cpp clone
-python training/download_weights.py      # pre-stage Qwen3-8B to $BPX_BASE_DIR (offline after this)
+source  training/config.sh
+bash    training/env/import_image.sh     # ONCE: registry -> $BPX_SQSH (~15-20 min, see gotchas)
+bash    training/env/setup_env.sh        # venv (inherits container torch) + llama.cpp clone
+
+python3 -m pip install --user huggingface_hub   # ONCE: the run node's own python needs it
+python3 training/download_weights.py            # pre-stage Qwen3-8B to $BPX_BASE_DIR (~16GB)
 ```
+
+> The venv can't help with the download: it was built with the **container's** python and only
+> works inside the container. `download_weights.py` runs on the run node, so *that* python needs
+> its own `huggingface_hub`.
 
 ### 2. Run G1 (batch, offline)
 
@@ -99,6 +105,11 @@ ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
 
 ## Notes / gotchas
 
+- **Partitions are split by submission type, not just duration.** `gpu-interactive`,
+  `gpu-shortrun` and `cpu-interactive` accept **`srun`/`salloc` only** — `sbatch` is rejected
+  ("Partition gpu-shortrun is interactive-only"). Anything you `sbatch` (the G1 job, real
+  training) must target a **`*-batch`** partition. Don't be fooled by `gpu-shortrun`'s 1-day
+  limit: it is not sbatch-able.
 - **Never let a job pull from the registry.** Measured on this cluster: pyxis importing
   `nvcr.io#nvidia/pytorch:25.01-py3` costs **~15 min of job runtime, every time** (60 layers,
   ~20GB, unpack + mksquashfs) — a probe with `--time=00:15:00` was killed by its limit purely
