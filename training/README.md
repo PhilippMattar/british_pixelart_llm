@@ -43,7 +43,13 @@ $HOME/bpx-work/              <- BPX_PROJECT_DIR (weights, venv, work/ — never 
 
 The scripts `mkdir -p` the workspace themselves; you don't create it.
 
-### 1. Build the env + stage weights (on the login/interactive node — has internet)
+### 1. Build the env + stage weights — run these ON THE LOGIN NODE
+
+> Every script below is a **login-node orchestrator**: it computes nothing itself, it submits
+> its own `srun`/`sbatch` and the heavy work lands on a compute node. **Do not wrap them in
+> `srun`** — a nested srun deadlocks (the outer step holds the allocation while the inner one
+> waits for it: `step creation temporarily disabled ... Requested nodes are busy`, forever).
+> They now refuse to run inside an allocation rather than hang.
 
 ```bash
 source training/config.sh

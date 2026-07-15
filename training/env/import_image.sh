@@ -8,6 +8,15 @@
 # Idempotent: does nothing if the squashfs already exists.
 set -euo pipefail
 
+# Run this from the LOGIN node. It submits its own srun, so wrapping it in another srun
+# deadlocks: the outer step holds the allocation and the inner one waits for it forever
+# ("step creation temporarily disabled ... Requested nodes are busy").
+if [ -n "${SLURM_JOB_ID:-}" ]; then
+  echo "Don't wrap this in srun — it submits its own job. Run it plainly on the login node." >&2
+  echo "(You are inside Slurm job ${SLURM_JOB_ID}.)" >&2
+  exit 1
+fi
+
 HERE="$(cd "$(dirname "$0")/.." && pwd)"   # training/
 source "$HERE/config.sh"
 
