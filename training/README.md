@@ -18,8 +18,25 @@ and `BPX_OLLAMA_BASE_TAG`).
 
 ### 0. Configure (once)
 
-Edit [config.sh](config.sh): set `BPX_ACCOUNT` (your Slurm `-A`) and `BPX_PROJECT_DIR`
-(your `/sc/projects/<group>/<project>`). Everything else has sensible defaults.
+Only one value needs checking — your Slurm account. On the cluster:
+
+```bash
+sacctmgr show assoc user=$USER format=account%30,user%20,partition%20
+```
+
+The `account` column is your `-A` value; if it differs from [config.sh](config.sh)'s
+`BPX_ACCOUNT`, `export BPX_ACCOUNT=<real-account>` (or edit the file).
+
+Everything else defaults sensibly. In particular `BPX_PROJECT_DIR` defaults to
+`$HOME/bpx-work` — the workspace for the big artifacts (16GB weights, venv, hf-cache,
+adapters). **Keep it separate from your git checkout**, or those land inside the repo:
+
+```text
+$HOME/britishpixelart_llm/   <- the git clone (code only)
+$HOME/bpx-work/              <- BPX_PROJECT_DIR (weights, venv, work/ — never committed)
+```
+
+The scripts `mkdir -p` the workspace themselves; you don't create it.
 
 ### 1. Build the env + stage weights (on the login/interactive node — has internet)
 

@@ -4,7 +4,10 @@
 # Slurm allocation for -A. NOT your login — a short account name. VERIFY on the cluster:
 #   sacctmgr show assoc user="$USER" format=account,user,partition
 export BPX_ACCOUNT="${BPX_ACCOUNT:-philipp.mattar}"                       # <-- likely your username; confirm with sacctmgr
-export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-/sc/home/philipp.mattar/britishpixelart_llm}"  # shared FS (home = 200GB quota)
+# Workspace for BIG artifacts (16GB base weights, venv, hf-cache, llama.cpp, adapters).
+# MUST NOT be your git checkout, or those land inside the repo. $HOME is on the shared FS
+# and visible from every node (200GB quota — see training/README.md for the budget).
+export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-$HOME/bpx-work}"
 
 # Local-only: SSH target for copying results back to your laptop (NOT used by cluster jobs).
 # Format: user@access-node. Reach it over the *Scientific Compute* VPN (not the HPI VPN).
