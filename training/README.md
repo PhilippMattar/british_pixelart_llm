@@ -78,18 +78,26 @@ python3 training/download_weights.py            # pre-stage Qwen3-8B to $BPX_BAS
 ### 2. Run G1 (batch, offline)
 
 ```bash
-bash training/submit_g1.sh              # sbatch on gpu-shortrun; watch: squeue --me
+bash training/submit_g1.sh              # sbatch on gpu-batch; watch: squeue --me
 # on success: $BPX_WORK_DIR/g1.gguf
 ```
 
-### 3. Verify locally (needs Ollama)
+### 3. Verify locally (needs Ollama) — run on your LAPTOP
 
 ```bash
-source training/config.sh                 # for $BPX_CLUSTER_SSH and $BPX_WORK_DIR
-rsync "$BPX_CLUSTER_SSH:$BPX_WORK_DIR/g1.gguf" models/adapters/g1.gguf
-ollama create bpx-g1 -f models/Modelfile.g1
-ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
+source training/config.sh          # for $BPX_CLUSTER_SSH
+mkdir -p models/adapters
+# The remote path is relative to your *cluster* $HOME (default BPX_PROJECT_DIR=$HOME/bpx-work).
+# Don't use $BPX_WORK_DIR here — sourced on your laptop it expands to your *laptop's* home.
+rsync -P "$BPX_CLUSTER_SSH:bpx-work/work/g1.gguf" models/adapters/g1.gguf
+ollama pull qwen3:8b
+( cd models && ollama create bpx-g1 -f Modelfile.g1 )
+ollama run bpx-g1 "How's the weather?"   # coherent (faintly British) => PASS
 ```
+
+> **PASSED 2026-07-16:** Qwen3-8B QLoRA → GGUF → Ollama works end-to-end (`ollama run` returned
+> coherent, faintly-British output from the 100-sample dummy adapter). Qwen3-8B is confirmed as
+> the student base — no Qwen2.5-7B fallback needed.
 
 ## Files
 

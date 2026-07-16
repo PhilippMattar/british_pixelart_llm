@@ -10,8 +10,9 @@ export BPX_ACCOUNT="${BPX_ACCOUNT:-sci-lippert-intelligent-agents}"
 export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-$HOME/bpx-work}"
 
 # Local-only: SSH target for copying results back to your laptop (NOT used by cluster jobs).
-# Format: user@access-node. Reach it over the *Scientific Compute* VPN (not the HPI VPN).
-export BPX_CLUSTER_SSH="${BPX_CLUSTER_SSH:-philipp.mattar@hpc.sci.hpi.de}"
+# Use a RUN node (rx01/rx02) — file transfer is a listed use there, and the login node can
+# block rsync's helper. Reach it over the *Scientific Compute* VPN (not the HPI VPN).
+export BPX_CLUSTER_SSH="${BPX_CLUSTER_SSH:-philipp.mattar@rx01.hpc.sci.hpi.de}"
 
 # Partitions — verified with `sinfo` + submission errors on the cluster. Always set --time.
 # CRITICAL: partitions are split by SUBMISSION TYPE, not just duration. The *-interactive and
