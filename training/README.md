@@ -108,6 +108,28 @@ ollama run bpx-g1 "How's the weather?"   # coherent (faintly British) => PASS
 > coherent, faintly-British output from the 100-sample dummy adapter). Qwen3-8B is confirmed as
 > the student base — no Qwen2.5-7B fallback needed.
 
+## Humor spike — teacher generation (Phase 2, §6.3)
+
+Generate ~24 in-persona samples/persona with the teacher and **read them** before investing in
+seed collection + a 3k-sample run. Iterate the prompts in `personas.py` until the British dry
+wit lands and the Scots is warm-not-caricature. Runs on a **run node** (submits its own jobs).
+
+```bash
+cd ~/britishpixelart_llm && git pull origin main && source training/config.sh
+
+bash    training/env/import_vllm.sh     # ONCE: vLLM container -> $BPX_VLLM_SQSH (~10-20 min)
+python3 training/download_teacher.py    # ONCE: Qwen3.6-27B -> $BPX_TEACHER_DIR (~54GB bf16)
+bash    training/submit_teacher.sh      # sbatch on gpu-batch (needs an 80GB A100 for bf16 27B)
+squeue --me ; tail -f bpx-teacher_*.log
+
+# then read the output on your laptop:
+rsync -P "$BPX_CLUSTER_SSH:bpx/work/spike/british.jsonl"  /tmp/ && less /tmp/british.jsonl
+rsync -P "$BPX_CLUSTER_SSH:bpx/work/spike/scottish.jsonl" /tmp/ && less /tmp/scottish.jsonl
+```
+
+Tuning knobs live in `personas.py` (the system prompts) and `seeds/exemplars.py` (the voice).
+The `rsync` paths assume `BPX_PROJECT_DIR=…/bpx`; adjust to your workspace's `work/spike/`.
+
 ## Files
 
 | File | Role |

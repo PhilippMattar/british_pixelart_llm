@@ -67,3 +67,12 @@ export BPX_SCRATCH_DIR="${BPX_SCRATCH_DIR:-/sc/scratch/$USER/bpx}"
 #   Qwen/Qwen3.6-27B-AWQ-INT4   ~15GB       -> any GPU incl. A100 40GB (frugal)
 # Needs vllm>=0.19.0.
 export BPX_TEACHER_HF="${BPX_TEACHER_HF:-Qwen/Qwen3.6-27B}"
+export BPX_TEACHER_DIR="$BPX_PROJECT_DIR/models/teacher"          # pre-staged teacher weights
+# bf16 27B is ~54GB -> needs an 80GB A100 (there are some in gpu-batch). AND-constraint syntax.
+# For a 40GB A100, switch BPX_TEACHER_HF to Qwen/Qwen3.6-27B-AWQ-INT4 and drop the GPU_MEM part.
+export BPX_TEACHER_CONSTRAINT="${BPX_TEACHER_CONSTRAINT:-GPU_SKU:A100&GPU_MEM:80GB}"
+
+# vLLM runs in its OWN container (its torch pins conflict with the NGC training image), imported
+# once to a squashfs like the training image. Needs a vLLM >=0.19 for Qwen3.6 (check the tag).
+export BPX_VLLM_IMAGE_URI="${BPX_VLLM_IMAGE_URI:-docker.io#vllm/vllm-openai:latest}"
+export BPX_VLLM_SQSH="${BPX_VLLM_SQSH:-$BPX_PROJECT_DIR/images/vllm.sqsh}"
