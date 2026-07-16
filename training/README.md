@@ -118,6 +118,11 @@ ollama run bpx-g1 "How's the weather?"    # coherent + faintly British => PASS
 - **Always pass `--mem` and `-c` to any job that does import a container.** The import is
   host-RAM hungry; with Slurm's default memory you get OOM-killed mid-import (`error code: 137`,
   `oom_kill event`) before your code runs. `-c 8 --mem=64G` suffices.
+- **`WORLD_SIZE expected, but not set`** (single-GPU training). pyxis/the NGC image leave
+  `LOCAL_RANK` set in the container env; accelerate reads that as a torchrun-style distributed
+  launch and calls `init_process_group(env://)`, which needs `WORLD_SIZE`/`MASTER_ADDR` we don't
+  have. `g1_smoke.py` drops `LOCAL_RANK`/`RANK`/`WORLD_SIZE` before importing accelerate so it
+  runs single-process — replicate that in any new training entry point.
 - **Your conda leaks into the container.** Enroot mounts `$HOME`, so an interactive
   (`--pty bash`) or login (`bash -lc`) shell sources `~/.bashrc`, activates your conda `base`,
   and shadows the container's python — you get `(base)` in the prompt and

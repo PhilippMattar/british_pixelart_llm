@@ -14,13 +14,23 @@ must be pre-staged so it can run offline.
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
+import os
 
-import torch
-from datasets import load_dataset
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from trl import SFTConfig, SFTTrainer
+# pyxis / the NGC image leave LOCAL_RANK set in the container env. accelerate reads that as a
+# torchrun-style distributed launch and calls init_process_group(env://), which then needs
+# WORLD_SIZE/MASTER_ADDR — but this is a single-GPU job. Dropping the rendezvous vars before
+# accelerate initialises makes it run single-process (DistributedType.NO). Must precede the
+# transformers/trl imports below, which pull accelerate in.
+for _var in ("LOCAL_RANK", "RANK", "WORLD_SIZE"):
+    os.environ.pop(_var, None)
+
+from pathlib import Path  # noqa: E402
+
+import torch  # noqa: E402
+from datasets import load_dataset  # noqa: E402
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training  # noqa: E402
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig  # noqa: E402
+from trl import SFTConfig, SFTTrainer  # noqa: E402
 
 # Standard attention + MLP projections for Qwen-family models.
 TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
