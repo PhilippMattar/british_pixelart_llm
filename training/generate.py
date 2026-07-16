@@ -1,12 +1,14 @@
-"""Teacher generation (PLAN.md §6.3) — vLLM batch-generates in-persona answers.
+"""Teacher generation (PLAN.md §6.3) — batch-generate in-persona answers.
 
 For each (persona, instruction): build [persona system + style exemplars, user instruction],
-let Qwen3.6-27B answer in character (non-thinking, to match how the student serves — §3), and
+let the teacher answer in character (non-thinking, to match how the student serves — §3), and
 write ONLY the {user, assistant} turn as a training example. ~15% of samples use the "plain"
 prompt to protect helpfulness.
 
-Runs inside the vLLM container with the teacher pre-staged (offline). Import order note: this
-is launched by slurm/teacher.sbatch which activates nothing — vLLM is the container's own env.
+Backend: `transformers` (runs in the NGC container we already use for training). This is the
+spike path — fine for tens/hundreds of samples. For the full ~6k run, swap to a vLLM backend
+for throughput (deferred: the cluster's enroot can't import the vLLM OCI image; a pip-installed
+vLLM venv is the plan). The persona/prompt logic here is backend-agnostic.
 """
 
 from __future__ import annotations
@@ -22,13 +24,14 @@ from seeds.exemplars import POOLS
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Teacher generation (vLLM)")
+    p = argparse.ArgumentParser(description="Teacher generation (transformers)")
     p.add_argument("--model", required=True, help="path to the pre-staged teacher checkpoint")
     p.add_argument("--out-dir", required=True, help="output dir for {persona}.jsonl")
     p.add_argument("--personas", nargs="+", default=list(PERSONAS), choices=PERSONAS)
     p.add_argument("--n", type=int, default=0, help="prompts per persona (0 = all spike prompts)")
     p.add_argument("--exemplars-k", type=int, default=4, help="style exemplars per sample")
     p.add_argument("--plain-frac", type=float, default=0.15, help="fraction of plain-competence samples")
+    p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=512)
     p.add_argument("--temperature", type=float, default=0.8)
     p.add_argument("--seed", type=int, default=0)
@@ -37,35 +40,61 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    from vllm import LLM, SamplingParams  # container-only; imported lazily so the file compiles anywhere
+    import torch  # container-only; lazy so the file compiles/imports anywhere
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     rng = random.Random(args.seed)
+    torch.manual_seed(args.seed)
     prompts = SPIKE_PROMPTS if args.n <= 0 else SPIKE_PROMPTS[: args.n]
-    llm = LLM(model=args.model, dtype="bfloat16", trust_remote_code=True)
-    sampling = SamplingParams(
-        temperature=args.temperature, top_p=0.95, max_tokens=args.max_tokens, seed=args.seed
+
+    tok = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    if tok.pad_token_id is None:
+        tok.pad_token = tok.eos_token
+    tok.padding_side = "left"  # decoder-only batched generation
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model, dtype=torch.bfloat16, device_map="cuda", trust_remote_code=True
     )
+    model.eval()
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for persona in args.personas:
         pool = POOLS[persona]
-        records, conversations = [], []
+        records, texts = [], []
         for instruction in prompts:
             plain = rng.random() < args.plain_frac
             exemplars = sample_exemplars(pool, args.exemplars_k, rng)
-            conversations.append(build_messages(persona, instruction, exemplars, plain=plain))
+            messages = build_messages(persona, instruction, exemplars, plain=plain)
+            # Non-thinking: personas never emit <think> (matches serving, §3).
+            texts.append(
+                tok.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+                )
+            )
             records.append({"instruction": instruction, "plain": plain})
 
-        # Non-thinking: personas never emit <think> (matches serving, §3).
-        outputs = llm.chat(
-            conversations, sampling, chat_template_kwargs={"enable_thinking": False}
-        )
+        answers: list[str] = []
+        for start in range(0, len(texts), args.batch_size):
+            batch = texts[start : start + args.batch_size]
+            enc = tok(batch, return_tensors="pt", padding=True, add_special_tokens=False).to(
+                model.device
+            )
+            with torch.no_grad():
+                out = model.generate(
+                    **enc,
+                    max_new_tokens=args.max_tokens,
+                    do_sample=True,
+                    temperature=args.temperature,
+                    top_p=0.95,
+                    pad_token_id=tok.pad_token_id,
+                )
+            gen = out[:, enc["input_ids"].shape[1] :]
+            answers.extend(t.strip() for t in tok.batch_decode(gen, skip_special_tokens=True))
 
         out_path = out_dir / f"{persona}.jsonl"
         with out_path.open("w", encoding="utf-8") as f:
-            for record, output in zip(records, outputs):
-                answer = output.outputs[0].text.strip()
+            for record, answer in zip(records, answers):
                 f.write(
                     json.dumps(
                         {

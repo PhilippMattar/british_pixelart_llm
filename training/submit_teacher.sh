@@ -5,7 +5,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/config.sh"
 
-[ -f "$BPX_VLLM_SQSH" ] || { echo "Missing $BPX_VLLM_SQSH — run 'bash training/env/import_vllm.sh' first." >&2; exit 1; }
+[ -f "$BPX_SQSH" ] || { echo "Missing $BPX_SQSH — run 'bash training/env/import_image.sh' first." >&2; exit 1; }
 [ -d "$BPX_TEACHER_DIR" ] || { echo "Missing teacher at $BPX_TEACHER_DIR — run 'python training/download_teacher.py' first." >&2; exit 1; }
 
 sbatch -A "$BPX_ACCOUNT" \

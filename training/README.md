@@ -114,11 +114,14 @@ Generate ~24 in-persona samples/persona with the teacher and **read them** befor
 seed collection + a 3k-sample run. Iterate the prompts in `personas.py` until the British dry
 wit lands and the Scots is warm-not-caricature. Runs on a **run node** (submits its own jobs).
 
-```bash
-cd ~/britishpixelart_llm && git pull origin main && source training/config.sh
+Generation reuses the **NGC training container + venv** (via `transformers`), not vLLM — the
+cluster's `enroot` can't import vLLM's OCI image. vLLM is the throughput path for the full run
+(a pip-installed venv, to be set up when we scale).
 
-bash    training/env/import_vllm.sh     # ONCE: vLLM container -> $BPX_VLLM_SQSH (~10-20 min)
-python3 training/download_teacher.py    # ONCE: Qwen3.6-27B -> $BPX_TEACHER_DIR (~54GB bf16)
+```bash
+cd ~/britishpixelart_llm && git reset --hard origin/main && source training/config.sh
+
+python3 training/download_teacher.py    # ONCE: teacher -> $BPX_TEACHER_DIR (~54GB bf16), run node
 bash    training/submit_teacher.sh      # sbatch on gpu-batch (needs an 80GB A100 for bf16 27B)
 squeue --me ; tail -f bpx-teacher_*.log
 
@@ -129,6 +132,7 @@ rsync -P "$BPX_CLUSTER_SSH:bpx/work/spike/scottish.jsonl" /tmp/ && less /tmp/sco
 
 Tuning knobs live in `personas.py` (the system prompts) and `seeds/exemplars.py` (the voice).
 The `rsync` paths assume `BPX_PROJECT_DIR=…/bpx`; adjust to your workspace's `work/spike/`.
+`env/import_vllm.sh` is kept for the scale-up but is **not** needed for the spike.
 
 ## Files
 
