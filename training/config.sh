@@ -4,9 +4,14 @@
 # Slurm allocation for -A — the course allocation, NOT your login.
 # Confirmed 2026-07-12 via: sacctmgr show assoc user=$USER format=account,user,partition
 export BPX_ACCOUNT="${BPX_ACCOUNT:-sci-lippert-intelligent-agents}"
-# Workspace for BIG artifacts (16GB base weights, venv, hf-cache, llama.cpp, adapters).
-# MUST NOT be your git checkout, or those land inside the repo. $HOME is on the shared FS
-# and visible from every node (200GB quota — see training/README.md for the budget).
+# Workspace for BIG artifacts (~23GB container squashfs, ~16GB base weights, venv, llama.cpp,
+# hf-cache, adapters, and later the teacher weights + datasets).
+# MUST be OUTSIDE your git checkout (or they land in the repo) AND — strongly recommended —
+# OUTSIDE home: home has a FIXED 200GB quota shared with everything, and HPI policy says
+# project data belongs in a /sc/projects share (persistent, larger). Point it there via
+# ~/.bashrc so it sticks, e.g.:
+#   export BPX_PROJECT_DIR=/sc/projects/sci-lippert/intelligent-agents/$USER/bpx
+# The $HOME default below is only a fallback for a quick first try.
 export BPX_PROJECT_DIR="${BPX_PROJECT_DIR:-$HOME/bpx-work}"
 
 # Local-only: SSH target for copying results back to your laptop (NOT used by cluster jobs).
