@@ -130,7 +130,7 @@ Goal per persona: **~3,000 chat-format pairs** (JSONL, Qwen3 non-thinking templa
 
 ### 6.3 Teacher generation (cluster, SLURM + vLLM)
 
-- Teacher: biggest current instruction-tuned **Qwen** that fits 1–2 A100/H100 (Qwen2.5-72B-Instruct or newer Qwen3-30B+ class).
+- Teacher: latest capable instruction-tuned **Qwen** (2026-07-16: **Qwen3.6-27B**, dense — rated best-for-creative-writing, beats the older Qwen3.5-122B MoE, Apache-2.0; served via vLLM so no GGUF concern). Earlier plan text said "Qwen2.5-72B or newer Qwen3-30B+ class"; Qwen3.6-27B supersedes both.
 - Per sample: persona system prompt + 3–5 random seed snippets as style exemplars + instruction → in-persona answer.
 - Guardrails in the teacher prompt: answer correctly first; ≤3 dialect markers per paragraph; no stereotyped hostility; British = dry understatement, Scottish = warm grumpiness. Plus ~15% "plain competence" pairs (persona tone only in framing) to protect helpfulness.
 

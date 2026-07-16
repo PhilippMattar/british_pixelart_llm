@@ -50,4 +50,14 @@ export HF_HOME="$BPX_PROJECT_DIR/hf-cache"                         # HF cache on
 # NOT home, to protect the 200GB home quota. Global scratch is huge (~450TB) but ephemeral —
 # fine for re-downloadable model weights. Used by the later teacher-generation stage.
 export BPX_SCRATCH_DIR="${BPX_SCRATCH_DIR:-/sc/scratch/$USER/bpx}"
-export BPX_TEACHER_HF="${BPX_TEACHER_HF:-Qwen/Qwen2.5-72B-Instruct-AWQ}"   # ~40GB, 1x H100 via vLLM
+
+# Teacher for data generation (vLLM, so no llama.cpp/GGUF concern — the student's constraint
+# doesn't apply here). Chosen 2026-07-16 after a web review: Qwen3.6-27B is the latest gen
+# (Qwen3 -> 3.5 -> 3.6), *dense* (sources rate dense as best-for-creative-writing = humor),
+# beats the older Qwen3.5-122B-A10B MoE overall, and stays Apache-2.0. Newer AND smaller than
+# the previous Qwen2.5-72B-AWQ default. Serve it with a quant matched to the GPU at gen time:
+#   Qwen/Qwen3.6-27B            bf16 ~54GB  -> A100 80GB (near-lossless)
+#   Qwen/Qwen3.6-27B-FP8        ~27GB       -> H100 only (native FP8; near-lossless)
+#   Qwen/Qwen3.6-27B-AWQ-INT4   ~15GB       -> any GPU incl. A100 40GB (frugal)
+# Needs vllm>=0.19.0.
+export BPX_TEACHER_HF="${BPX_TEACHER_HF:-Qwen/Qwen3.6-27B}"
