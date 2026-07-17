@@ -18,7 +18,7 @@ import json
 import random
 from pathlib import Path
 
-from personas import PERSONAS, build_messages, sample_exemplars
+from personas import PERSONAS, build_messages, pick_mode, sample_exemplars
 from prompts.spike import SPIKE_PROMPTS
 from seeds.exemplars import POOLS
 
@@ -30,7 +30,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--personas", nargs="+", default=list(PERSONAS), choices=PERSONAS)
     p.add_argument("--n", type=int, default=0, help="prompts per persona (0 = all spike prompts)")
     p.add_argument("--exemplars-k", type=int, default=4, help="style exemplars per sample")
-    p.add_argument("--plain-frac", type=float, default=0.15, help="fraction of plain-competence samples")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=512)
     p.add_argument("--temperature", type=float, default=0.8)
@@ -63,16 +62,16 @@ def main() -> None:
         pool = POOLS[persona]
         records, texts = [], []
         for instruction in prompts:
-            plain = rng.random() < args.plain_frac
+            mode = pick_mode(persona, rng)
             exemplars = sample_exemplars(pool, args.exemplars_k, rng)
-            messages = build_messages(persona, instruction, exemplars, plain=plain)
+            messages = build_messages(persona, instruction, exemplars, mode=mode)
             # Non-thinking: personas never emit <think> (matches serving, §3).
             texts.append(
                 tok.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
                 )
             )
-            records.append({"instruction": instruction, "plain": plain})
+            records.append({"instruction": instruction, "mode": mode})
 
         answers: list[str] = []
         for start in range(0, len(texts), args.batch_size):
@@ -103,7 +102,7 @@ def main() -> None:
                                 {"role": "assistant", "content": answer},
                             ],
                             "persona": persona,
-                            "plain": record["plain"],
+                            "mode": record["mode"],
                         },
                         ensure_ascii=False,
                     )
