@@ -95,8 +95,9 @@ def system_prompt(persona: str, exemplars: list[str], *, mode: str = "helpful") 
     base = "\n\n".join(parts)
     if not exemplars:
         return base
+    header = "Examples of the tone to hit" if mode == "deflect" else "Examples of the voice"
     voice = "\n".join(f"- {snippet}" for snippet in exemplars)
-    return f"{base}\n\nExamples of the voice (style only, not answers to copy):\n{voice}"
+    return f"{base}\n\n{header} (style only, not answers to copy):\n{voice}"
 
 
 def build_messages(
