@@ -20,7 +20,7 @@ from pathlib import Path
 
 from personas import PERSONAS, build_messages, pick_mode, sample_exemplars
 from prompts.spike import SPIKE_PROMPTS
-from seeds.exemplars import POOLS
+from seeds.exemplars import DEFLECT_POOLS, POOLS
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,10 +59,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for persona in args.personas:
-        pool = POOLS[persona]
         records, texts = [], []
         for instruction in prompts:
             mode = pick_mode(persona, rng)
+            pool = DEFLECT_POOLS[persona] if mode == "deflect" else POOLS[persona]
             exemplars = sample_exemplars(pool, args.exemplars_k, rng)
             messages = build_messages(persona, instruction, exemplars, mode=mode)
             # Non-thinking: personas never emit <think> (matches serving, §3).
