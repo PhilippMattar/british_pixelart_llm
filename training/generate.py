@@ -16,11 +16,22 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 from pathlib import Path
 
 from personas import PERSONAS, build_messages, pick_mode, sample_exemplars
 from prompts.spike import SPIKE_PROMPTS
 from seeds.exemplars import DEFLECT_POOLS, POOLS
+
+# Sentence-ender (with any trailing quote/bracket) — used to trim answers cut off by the cap.
+_SENT_END = re.compile(r"[.!?][\"'”’)\]]*")
+
+
+def _trim_to_last_sentence(text: str) -> str:
+    """Drop a dangling final sentence when generation hit max_tokens, so no training pair ends
+    mid-thought. Answers that finished cleanly (emitted EOS) skip this."""
+    matches = list(_SENT_END.finditer(text))
+    return text[: matches[-1].end()].rstrip() if matches else text.rstrip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,7 +100,10 @@ def main() -> None:
                     pad_token_id=tok.pad_token_id,
                 )
             gen = out[:, enc["input_ids"].shape[1] :]
-            answers.extend(t.strip() for t in tok.batch_decode(gen, skip_special_tokens=True))
+            for row in gen:
+                complete = bool((row == tok.eos_token_id).any().item())  # emitted EOS => not cut off
+                text = tok.decode(row, skip_special_tokens=True).strip()
+                answers.append(text if complete else _trim_to_last_sentence(text))
 
         out_path = out_dir / f"{persona}.jsonl"
         with out_path.open("w", encoding="utf-8") as f:
