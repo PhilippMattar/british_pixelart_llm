@@ -68,6 +68,8 @@ export BPX_SCRATCH_DIR="${BPX_SCRATCH_DIR:-/sc/scratch/$USER/bpx}"
 # Needs vllm>=0.19.0.
 export BPX_TEACHER_HF="${BPX_TEACHER_HF:-Qwen/Qwen3.6-27B}"
 export BPX_TEACHER_DIR="$BPX_PROJECT_DIR/models/teacher"          # pre-staged teacher weights
+export BPX_DATASETS_DIR="$BPX_PROJECT_DIR/datasets"               # staged open instruction sets (offline)
+export BPX_BANK="$BPX_WORK_DIR/bank.jsonl"                        # built prompt bank (build_bank.py)
 # bf16 27B is ~54GB -> needs an 80GB A100 (there are some in gpu-batch). AND-constraint syntax.
 # For a 40GB A100, switch BPX_TEACHER_HF to Qwen/Qwen3.6-27B-AWQ-INT4 and drop the GPU_MEM part.
 export BPX_TEACHER_CONSTRAINT="${BPX_TEACHER_CONSTRAINT:-GPU_SKU:A100&GPU_MEM:80GB}"
