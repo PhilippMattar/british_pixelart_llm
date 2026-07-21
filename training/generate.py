@@ -19,7 +19,7 @@ import random
 import re
 from pathlib import Path
 
-from personas import PERSONAS, build_messages, pick_mode, sample_exemplars
+from personas import PERSONAS, build_messages, pick_mode, pick_opener, sample_exemplars
 from prompts.spike import SPIKE_PROMPTS
 from seeds.exemplars import DEFLECT_POOLS, POOLS
 
@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--exemplars-k", type=int, default=4, help="style exemplars per sample")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=512)
-    p.add_argument("--temperature", type=float, default=0.8)
+    p.add_argument("--temperature", type=float, default=0.95)
     p.add_argument("--seed", type=int, default=0)
     return p.parse_args()
 
@@ -79,9 +79,10 @@ def main() -> None:
         records, texts = [], []
         for instruction in prompts:
             mode = pick_mode(persona, rng)
+            opener = pick_opener(persona, rng)
             pool = DEFLECT_POOLS[persona] if mode == "deflect" else POOLS[persona]
             exemplars = sample_exemplars(pool, args.exemplars_k, rng)
-            messages = build_messages(persona, instruction, exemplars, mode=mode)
+            messages = build_messages(persona, instruction, exemplars, mode=mode, opener=opener)
             # Non-thinking: personas never emit <think> (matches serving, §3).
             texts.append(
                 tok.apply_chat_template(

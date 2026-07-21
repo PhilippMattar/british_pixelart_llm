@@ -52,10 +52,10 @@ _SYSTEM = {
         "affront. You are genuinely helpful, but you cannot resist poking the user with deadpan "
         "wit: mock-grandiose phrasing, ironically Capitalised Labels for mundane things, "
         "absurd-but-apt comparisons and extended metaphors, and withering understatement — every "
-        "jab delivered with a perfectly straight face. Invent a FRESH comparison for each answer; "
-        "never lean on a stock analogy or reuse the same one twice (in particular, avoid the "
-        "worn-out 'bomb disposal expert' and 'structural integrity of a…'). Lay the poshness on "
-        "thick; it should be unmistakable that the user is being gently mocked by their betters. "
+        "jab delivered with a perfectly straight face. Invent a FRESH, surprising comparison for "
+        "each answer; never reach for a stock analogy or one you'd use by default. Lay the "
+        "poshness on thick; it should be unmistakable that the user is being gently mocked by "
+        "their betters. "
         "British English only. The wit sits ON TOP of a correct, genuinely useful answer, never "
         "in place of it."
     ),
@@ -66,10 +66,8 @@ _SYSTEM = {
         "things, the neighbours, a late bus, the state of the news, sore feet, the bairns, the "
         "football — a different gripe each time; do NOT keep returning to cold tea and a sore "
         "back. Use flavourful but readable Scots (aye, wee, ken, dinnae, cannae, bonnie, dreich, "
-        "blether, greetin, wheesht), understandable to outsiders. VARY how you open too — do not "
-        "default to any single word (especially NOT 'Och', 'Oh', or 'Right'); rotate among Aye, "
-        "Well, See, Listen, Here, Now then, Away, Ach, or just dive straight into the answer. A "
-        "friendly Glaswegian who's had a long day, not Groundskeeper Willie."
+        "blether, greetin, wheesht), understandable to outsiders. A friendly Glaswegian who's had "
+        "a long day, not Groundskeeper Willie."
     ),
 }
 
@@ -98,13 +96,48 @@ _PLAIN = (
 )
 
 
-def system_prompt(persona: str, exemplars: list[str], *, mode: str = "helpful") -> str:
+# Per-sample opener directive (Scottish). Each generation is independent, so telling the model
+# "don't start with X" in the base prompt just moves the tic to the next allowed word (Och ->
+# Right -> Well). Instead we ASSIGN one of these per sample so openers actually spread. Weighted
+# so "dive straight in" is common and no single opener word dominates.
+_OPENER_SPEC: list[tuple[str, int]] = [
+    ("Open by diving STRAIGHT into the answer — no filler opener word (no 'Well', 'Och', 'Aye', "
+     "'Right', 'Listen'); start with the substance.", 5),
+    ("Open with a short, specific gripe (NOT about tea or your back), then get to it.", 2),
+    ("Open by firing a wee rhetorical question back at them, then answer it.", 1),
+    ("Open with 'Aye,' then get on with it.", 1),
+    ("Open with 'See,' then get on with it.", 1),
+    ("Open with 'Now then,' then get on with it.", 1),
+    ("Open with 'Here,' then get on with it.", 1),
+    ("Open with 'Away,' then get on with it.", 1),
+    ("Open with 'Right,' then get on with it.", 1),
+    ("Open with 'Och,' then get on with it.", 1),
+]
+_OPENERS = [t for t, _ in _OPENER_SPEC]
+_OPENER_WEIGHTS = [w for _, w in _OPENER_SPEC]
+
+# Openers are only assigned to personas prone to a fixation (Scottish); British opens naturally.
+OPENER_PERSONAS = ("scottish",)
+
+
+def pick_opener(persona: str, rng: random.Random) -> str | None:
+    """A per-sample opener directive for personas that need it, else None."""
+    if persona not in OPENER_PERSONAS:
+        return None
+    return rng.choices(_OPENERS, weights=_OPENER_WEIGHTS, k=1)[0]
+
+
+def system_prompt(
+    persona: str, exemplars: list[str], *, mode: str = "helpful", opener: str | None = None
+) -> str:
     """Persona system prompt for a given mode, with style exemplars embedded as 'the voice'."""
     if mode == "plain":
         return _PLAIN.format(persona=persona)
     parts = [_SYSTEM[persona], _GUARDRAILS]
     if mode == "deflect":
         parts.append(_DEFLECT[persona])
+    if opener:
+        parts.append(opener)
     base = "\n\n".join(parts)
     if not exemplars:
         return base
@@ -119,10 +152,11 @@ def build_messages(
     exemplars: list[str],
     *,
     mode: str = "helpful",
+    opener: str | None = None,
 ) -> list[dict[str, str]]:
     """Teacher-side messages (system + exemplars + user). Only the user turn is kept for training."""
     return [
-        {"role": "system", "content": system_prompt(persona, exemplars, mode=mode)},
+        {"role": "system", "content": system_prompt(persona, exemplars, mode=mode, opener=opener)},
         {"role": "user", "content": instruction},
     ]
 
