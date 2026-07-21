@@ -39,7 +39,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", required=True, help="path to the pre-staged teacher checkpoint")
     p.add_argument("--out-dir", required=True, help="output dir for {persona}.jsonl")
     p.add_argument("--personas", nargs="+", default=list(PERSONAS), choices=PERSONAS)
-    p.add_argument("--n", type=int, default=0, help="prompts per persona (0 = all spike prompts)")
+    p.add_argument("--prompts", help="prompt-bank jsonl ({'prompt':...} per line); default = spike set")
+    p.add_argument("--n", type=int, default=0, help="cap prompts per persona (0 = all)")
     p.add_argument("--exemplars-k", type=int, default=4, help="style exemplars per sample")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=512)
@@ -55,7 +56,12 @@ def main() -> None:
 
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
-    prompts = SPIKE_PROMPTS if args.n <= 0 else SPIKE_PROMPTS[: args.n]
+    if args.prompts:
+        prompts = [json.loads(l)["prompt"] for l in Path(args.prompts).read_text().splitlines() if l.strip()]
+    else:
+        prompts = list(SPIKE_PROMPTS)
+    if args.n > 0:
+        prompts = prompts[: args.n]
 
     tok = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tok.pad_token_id is None:
