@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--exemplars-k", type=int, default=4, help="style exemplars per sample")
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-tokens", type=int, default=512)
-    p.add_argument("--temperature", type=float, default=0.95)
+    p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--seed", type=int, default=0)
     return p.parse_args()
 
