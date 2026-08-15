@@ -22,6 +22,8 @@ class ModelSpec:
     api_key_env: str = ""
     is_persona: bool = False
     keywords: tuple[str, ...] = ()
+    # "none" serves a fine-tuned persona non-thinking (§3 lock); "" omits the param.
+    reasoning_effort: str = ""
 
     @property
     def api_key(self) -> str:
@@ -69,6 +71,7 @@ def _spec_from_entry(entry: dict) -> ModelSpec:
         api_key_env=entry.get("api_key_env", ""),
         is_persona=entry.get("is_persona", False),
         keywords=tuple(entry.get("keywords", ())),
+        reasoning_effort=entry.get("reasoning_effort", ""),
     )
 
 
@@ -85,4 +88,9 @@ def _find_models_toml() -> Path | None:
 
 
 def client_for(spec: ModelSpec) -> LLMClient:
-    return LLMClient(base_url=spec.endpoint, api_key=spec.api_key, model_id=spec.model_id)
+    return LLMClient(
+        base_url=spec.endpoint,
+        api_key=spec.api_key,
+        model_id=spec.model_id,
+        reasoning_effort=spec.reasoning_effort,
+    )

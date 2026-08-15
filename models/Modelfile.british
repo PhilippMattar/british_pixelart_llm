@@ -1,0 +1,17 @@
+# British persona: the fine-tuned LoRA served over the base (PLAN.md §7.3).
+#   1) rsync the adapter back (cluster path is your absolute $BPX_WORK_DIR):
+#      rsync -P "$BPX_CLUSTER_SSH:/sc/projects/sci-lippert/intelligent-agents/philipp.mattar/bpx/work/british.gguf" models/adapters/british.gguf
+#   2) ollama pull qwen3:8b                                  # the base (§3 lock), if absent
+#   3) ollama create bpx-british -f models/Modelfile.british
+#   4) ollama run bpx-british --think=false "How's the weather?"   # NOTE the flag (see below)
+# Then point models.toml's `british` entry model_id at `bpx-british`.
+#
+# SERVE NON-THINKING (§3 lock). The adapter was trained with the Qwen3 non-thinking template,
+# so it must be served with thinking OFF, or it emits a <think> block it never learned and
+# leaks stray tokens. Pass `think: false` in the API request (bpx's LLMClient does this) or
+# `--think=false` on the CLI. Baking it into the Modelfile isn't possible: `PARAMETER think`
+# is rejected, and a hardcoded no-think TEMPLATE produced empty/garbled output in testing —
+# Ollama's own think:false path (which also strips any stray thinking from the response) is the
+# robust one (8/8 clean vs 5/8 empty for the template hack).
+FROM qwen3:8b
+ADAPTER ./adapters/british.gguf

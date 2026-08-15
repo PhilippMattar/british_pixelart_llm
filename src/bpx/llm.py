@@ -20,8 +20,16 @@ class Message:
 
 
 class LLMClient:
-    def __init__(self, *, base_url: str, api_key: str, model_id: str) -> None:
+    def __init__(
+        self, *, base_url: str, api_key: str, model_id: str, reasoning_effort: str = ""
+    ) -> None:
         self.model_id = model_id
+        # reasoning_effort="none" serves the fine-tuned personas NON-thinking (§3 lock): the
+        # adapters were trained on the Qwen3 non-thinking template, so a thinking-on serve emits
+        # a <think> block they never learned and leaks stray tokens. Sent via extra_body so it
+        # reaches Ollama's /v1 as a top-level field regardless of the SDK's typed params. Empty
+        # string => omit it entirely (remote OpenAI endpoints may reject "none").
+        self._extra_body = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key)
 
     async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
@@ -34,6 +42,7 @@ class LLMClient:
             model=self.model_id,
             messages=[{"role": m.role, "content": m.content} for m in messages],
             stream=True,
+            extra_body=self._extra_body,
         )
         try:
             async for chunk in stream:
