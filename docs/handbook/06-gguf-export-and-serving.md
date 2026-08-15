@@ -25,6 +25,12 @@ personas follow the same path.
   `ollama create bpx-g1` → `ollama run`).
 - The round-trip itself: `g1.gguf` is produced on the cluster, `rsync`'d to
   `models/adapters/`, and `ollama create bpx-g1 -f models/Modelfile.g1` registers it.
+- `models/Modelfile.british` / `.scottish` — the **real** personas, same `FROM` + `ADAPTER`
+  recipe as G1. Created as `bpx-british` / `bpx-scottish`.
+- **Non-thinking serving, wired into the app**: `models.toml`'s persona entries carry
+  `reasoning_effort = "none"`, which `registry.py` threads into `LLMClient`, which forwards it
+  (via `extra_body`) on every `/v1/chat/completions` call. This is what makes the served
+  personas match how they were trained (see below) — without it they leak stray tokens.
 
 ## Core concepts
 
@@ -39,6 +45,12 @@ personas follow the same path.
 - **Conversion is architecture-specific** — `convert_lora_to_gguf.py` needs to understand the
   base's architecture to map LoRA tensors; this is exactly where a new-ish model family can
   break, which is why G1 tests it on real Qwen3-8B rather than assuming.
+- **Serve exactly as trained — non-thinking.** The adapters were trained on the Qwen3
+  *non-thinking* template (§3 lock), so they must be served with thinking OFF. Qwen3 in Ollama
+  defaults thinking ON: it prompts a `<think>` block the persona never learned to fill, so it
+  emits garbage (a stray `贵州`, a bare `</think>`, an `Edinburgh`) before the real answer. The
+  cure is to disable thinking at serve time — a *runtime* option, not something bakeable into
+  the Modelfile.
 
 ## Resources
 
@@ -62,3 +74,14 @@ personas follow the same path.
 - **This is a smoke test, not a quality check.** G1 passing means the *path* works (coherent,
   faintly-British output from a 100-sample dummy adapter) — persona quality is judged later
   against the vibe benchmark (Ch. 04, and §7.4 eval).
+- **Disabling thinking has exactly one working route — find it empirically.** Three don't work:
+  `PARAMETER think false` in the Modelfile is *rejected* ("unknown parameter"); a hand-rolled
+  non-thinking `TEMPLATE` (hardcoding the empty `<think></think>` prefill) tested **5/8 empty /
+  garbled**; and `think: false` on the OpenAI-compatible `/v1` endpoint is silently ignored
+  (Ollama only honours `think` on its native `/api/chat`). What *does* work, **16/16 clean**, is
+  **`reasoning_effort: "none"`** on `/v1` — Ollama maps it to non-thinking *and* strips any stray
+  thinking from the response. bpx uses the OpenAI SDK, so that's the one we ship. Lesson: verify
+  the serve path with a handful of samples per candidate, not one — the failure is probabilistic.
+- **`reasoning_effort` is per-model, not global.** It's set only on the persona entries in
+  `models.toml`; an empty value omits the field entirely, because a *remote* OpenAI endpoint may
+  reject `"none"`. Don't hardcode it in `LLMClient`.
