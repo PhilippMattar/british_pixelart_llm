@@ -5,7 +5,9 @@
 Stand up the cluster-side training pipeline and prove it end-to-end with **G1**: a throwaway
 QLoRA run on the real Qwen3-8B base that trains an adapter in a few minutes, so the whole
 `train → adapter` machinery is known-good *before* any real data or long run. Everything
-downstream in fine-tuning waits on G1 passing (PLAN.md §7.1).
+downstream in fine-tuning waits on G1 passing (PLAN.md §7.1). Once G1 passed, the **real run**
+(`train_qlora.py`, §7.2) trained the two persona adapters on the committed data, and the
+**vibe benchmark** (`eval.py`, §7.4) measured that it worked.
 
 ## Why it exists
 
@@ -31,6 +33,17 @@ happens on the HPI SCI HPC because an 8B QLoRA needs an 80GB-class GPU we don't 
   British-flavoured samples.
 - `training/slurm/g1.sbatch` + `training/submit_g1.sh` — the batch job (dummy data → QLoRA →
   GGUF export) and its launcher, which supplies `-A/-p/-C` and the repo path.
+- `training/train_qlora.py` — the **real** run: generalises `g1_smoke.py` to the committed
+  `data/{persona}_{train,val}.jsonl` with the §7.2 hyperparameters (3 epochs, seq 2048,
+  effective batch 16), a held-out **val split** for an eval-loss curve, and **completion-only
+  loss**. `slurm/train.sbatch` + `submit_train.sh` loop over `BPX_PERSONA` (`british`/`scottish`/
+  `both`), training then GGUF-exporting each in one job.
+- `training/eval.py` + `eval_prompts.py` — the vibe benchmark (§7.4): 30 prompts/persona
+  (10 factual / 10 casual / 10 persona-trigger), an LLM-judge scoring each answer 0–5 on
+  persona-fit and helpfulness, `base` vs `adapter` (or any `label=model_id` set — the
+  bootstrap-vs-Reddit A/B reuses it). Run locally against Ollama; results in
+  `training/eval/results/`. **Both adapters scored persona-fit 1.9–2.4 → 5.0 with helpfulness
+  held (≈4.8 → ≈4.9)** — max persona gain, no helpfulness cost.
 
 ## Core concepts
 
@@ -47,6 +60,15 @@ happens on the HPI SCI HPC because an 8B QLoRA needs an 80GB-class GPU we don't 
   jobs execute on **compute** nodes (offline, GPUs); the **login** node forbids these commands.
 - **Offline by construction** — weights and the venv are pre-staged, jobs export
   `HF_HUB_OFFLINE=1`; nothing in a batch job may touch the network.
+- **Completion-only loss** — compute the loss on the assistant's answer only, masking the user's
+  question (label `-100`). The adapter learns *to speak in the voice*, not to predict questions.
+  `train_qlora.py` renders with `enable_thinking=False`, then masks the shared token prefix of
+  the full turn and the prompt-only render — a boundary that lands right after the assistant
+  header whether or not the template injects an empty `<think></think>`.
+- **LLM-judge vibe eval** — with no ground-truth "correct persona reply", a judge model scores
+  each answer on persona-fit + helpfulness. Judging *base vs adapter* on the same fixed prompts
+  turns a vibe into a defensible before/after table, and separating the two axes shows the
+  persona was added *without* trading away helpfulness.
 
 ## Resources
 
@@ -80,3 +102,10 @@ happens on the HPI SCI HPC because an 8B QLoRA needs an 80GB-class GPU we don't 
 - **OOM at image import** (exit 137) — give the import job real CPU/RAM (`-c 8 --mem=64G`).
 - **Home quota (200GB) fills fast** — weights + venv + squashfs belong on a `/sc/projects` share
   (`BPX_PROJECT_DIR`), not `$HOME`.
+- **`apply_chat_template(tokenize=True)` broke `datasets.map()`** — on the cluster stack
+  (transformers 5.13) it returns a `tokenizers.Encoding`, which Arrow can't serialise ("did not
+  recognize Python value type"). Render to a *string* (`tokenize=False`) then tokenize
+  explicitly with `add_special_tokens=False` — the two-step path G1 already used.
+- **The eval must judge what you serve — non-thinking.** `eval.py` serves candidates *and* the
+  judge with `reasoning_effort="none"`; forget it and the base model's `<think>` blocks pollute
+  the generations and the judge's own output (Ch. 06).
