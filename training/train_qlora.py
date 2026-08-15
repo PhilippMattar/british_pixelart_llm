@@ -87,12 +87,18 @@ def build_tokenize_fn(tokenizer, seq_len: int, completion_only: bool):
     """
 
     def render_ids(messages, add_generation_prompt: bool) -> list[int]:
-        return tokenizer.apply_chat_template(
+        # Render to a STRING then tokenize explicitly (like g1_smoke.py). apply_chat_template
+        # with tokenize=True returns a tokenizers.Encoding here, which .map() can't write to
+        # Arrow ("did not recognize Python value type"); the two-step path yields a plain
+        # list[int]. add_special_tokens=False: the template already carries the Qwen special
+        # tokens (<|im_start|> …); the tokenizer must not prepend more.
+        text = tokenizer.apply_chat_template(
             messages,
-            tokenize=True,
+            tokenize=False,
             add_generation_prompt=add_generation_prompt,
             enable_thinking=False,  # §3 lock: personas never think; matches serving.
         )
+        return tokenizer(text, add_special_tokens=False)["input_ids"]
 
     def fn(example: dict) -> dict:
         messages = example["messages"]
