@@ -140,6 +140,21 @@ async def test_model_picker_opens_and_selects(db):
         assert app.model_name == "gemma"
 
 
+async def test_keywords_help_opens_and_closes(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, "/keywords")
+        from bpx.widgets.keyword_help import KeywordHelp
+
+        assert isinstance(app.screen, KeywordHelp)
+        # the modal was handed the real lexicons to display
+        assert "cuppa" in app.screen._lexicons["british"]
+        assert "dreich" in app.screen._lexicons["scottish"]
+        app.screen.action_close()
+        await pilot.pause()
+        assert not isinstance(app.screen, KeywordHelp)  # dismissed back to the main screen
+
+
 def _sidebar_count(app) -> int:
     return len(app.query_one("#sidebar", ListView).children)
 

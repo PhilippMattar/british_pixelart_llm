@@ -20,8 +20,9 @@ from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Ma
 
 from .llm import Chunk, LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
-from .router.keywords import detect
+from .router.keywords import detect, lexicons
 from .store import Store
+from .widgets.keyword_help import KeywordHelp
 from .widgets.model_picker import ModelPicker
 from .widgets.spinner import WaitingIndicator
 
@@ -55,6 +56,7 @@ class ChatApp(App[None]):
         ("escape", "cancel", "Stop generating"),
         ("ctrl+n", "new_conversation", "New"),
         ("ctrl+o", "model_picker", "Model"),
+        ("ctrl+k", "keywords", "Keywords"),
         ("ctrl+c", "quit", "Quit"),
     ]
 
@@ -77,7 +79,9 @@ class ChatApp(App[None]):
             with Vertical(id="main"):
                 yield VerticalScroll(id="log")
                 yield WaitingIndicator(id="waiting")
-                yield Input(placeholder="Message bpx…   (/new · /model · /help)", id="prompt")
+                yield Input(
+                    placeholder="Message bpx…   (/new · /model · /keywords · /help)", id="prompt"
+                )
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -260,9 +264,11 @@ class ChatApp(App[None]):
             await self.action_delete_conversation()
         elif command in ("quit", "q", "exit"):
             self.exit()
+        elif command in ("keywords", "keys"):
+            self.action_keywords()
         elif command == "help":
             self.notify(
-                "/new · /delete · /model [name] · /help · /quit",
+                "/new · /delete · /model [name] · /keywords · /help · /quit",
                 title="Commands",
                 timeout=6,
             )
@@ -297,6 +303,10 @@ class ChatApp(App[None]):
         self.push_screen(
             ModelPicker(self.registry.names(), self.model_name), self._on_model_picked
         )
+
+    def action_keywords(self) -> None:
+        """Show the persona trigger-word lookup (Ctrl+K / /keywords)."""
+        self.push_screen(KeywordHelp(lexicons()))
 
     def _on_model_picked(self, name: str | None) -> None:
         if name:
