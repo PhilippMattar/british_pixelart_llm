@@ -41,7 +41,17 @@ a model "be British" and get a consistent character; you have to **train** it. T
   answers from the plain model versus our trained personas, scoring "how in-character" and "how
   helpful." Character jumped from ~2/5 to a perfect **5/5** — and helpfulness didn't drop at all.
 
+**Phase 3 — giving it a memory.** A normal chatbot forgets everything the moment you close a
+conversation. We fixed that: after you've chatted a bit, a background AI quietly reads the
+conversation and jots down **durable facts about you** — "the user is vegetarian", "the user lives
+in Berlin" — into a little notebook (a database table). Whenever you start *any* chat in that
+project, those notes are slipped to the model behind the scenes, so it already knows you. Ask it
+for a dinner idea and it suggests a vegetarian one near Berlin without being reminded. You can peek
+at or delete the notes anytime with `/memory`. Two nice touches: the note-taking happens in the
+background so it never slows your chat, and it works whether you're talking to the plain assistant
+or a persona.
+
 ## Where we are now
 
-Both personas are trained, wired into the app, and measured. Phase 2 is done. Next up: giving
-the app a **memory**, and letting it **search your documents and the web**.
+Both personas are trained, measured, and wired in; the app now has a cross-chat memory. Still to
+come: letting it **search your own documents** and **the web**.

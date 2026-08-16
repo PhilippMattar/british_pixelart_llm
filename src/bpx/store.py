@@ -96,8 +96,29 @@ def _migration_004(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_005(conn: sqlite3.Connection) -> None:
+    # Project-scoped memories (R6, §9): durable user facts a background LLM extracts, injected
+    # into the system prompt of every chat in the project. ON DELETE CASCADE ties them to the
+    # project's lifetime.
+    # IF NOT EXISTS so the migration-002 rewind test (which replays later migrations) is safe.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS memories ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,"
+        " content TEXT NOT NULL,"
+        " created_at TEXT NOT NULL)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)")
+
+
 # Ordered; MIGRATIONS[i] upgrades version i -> i+1.
-MIGRATIONS = [_migration_001, _migration_002, _migration_003, _migration_004]
+MIGRATIONS = [
+    _migration_001,
+    _migration_002,
+    _migration_003,
+    _migration_004,
+    _migration_005,
+]
 
 
 # --- row types ------------------------------------------------------------------
@@ -113,6 +134,14 @@ class Conversation:
     updated_at: str
     auto_switch: bool = True
     base_model: str = "qwen"
+
+
+@dataclass(frozen=True)
+class Memory:
+    id: int
+    project_id: int
+    content: str
+    created_at: str
 
 
 @dataclass(frozen=True)
@@ -265,6 +294,31 @@ class Store:
                 "UPDATE messages SET content = ?, complete = ? WHERE id = ?",
                 (content, int(complete), message_id),
             )
+
+    # -- memories (R6, §9) --
+    def add_memory(self, project_id: int, content: str) -> int:
+        with self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO memories (project_id, content, created_at) VALUES (?, ?, ?)",
+                (project_id, content, _now()),
+            )
+        return int(cur.lastrowid)
+
+    def list_memories(self, project_id: int, limit: int | None = None) -> list[Memory]:
+        """Project memories, newest first. `limit` caps for system-prompt injection."""
+        sql = "SELECT * FROM memories WHERE project_id = ? ORDER BY id DESC"
+        params: tuple = (project_id,)
+        if limit is not None:
+            sql += " LIMIT ?"
+            params = (project_id, limit)
+        rows = self._conn.execute(sql, params).fetchall()
+        return [
+            Memory(r["id"], r["project_id"], r["content"], r["created_at"]) for r in rows
+        ]
+
+    def delete_memory(self, memory_id: int) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
 
     def list_messages(self, conversation_id: int) -> list[StoredMessage]:
         rows = self._conn.execute(

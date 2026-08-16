@@ -12,17 +12,20 @@ from __future__ import annotations
 
 from asyncio import CancelledError
 from collections.abc import Callable
+from dataclasses import replace
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown
 
+from . import memory
 from .llm import Chunk, LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
 from .router.keywords import detect, lexicons
 from .store import Store
 from .widgets.keyword_help import KeywordHelp
+from .widgets.memory_list import MemoryList
 from .widgets.model_picker import ModelPicker
 from .widgets.spinner import WaitingIndicator
 
@@ -30,6 +33,8 @@ DEFAULT_TITLE = "New conversation"
 # The standard, non-persona model every new conversation starts on (§8). Personas are an overlay
 # the keyword router switches to and reverts from; they never become a conversation's base.
 DEFAULT_MODEL = "qwen"
+# Run background memory extraction once every this many user+assistant messages (R6, §9).
+MEMORY_EVERY = 4
 
 # Toast shown when the keyword router auto-switches persona (§8). Reverting to the base model is
 # silent — it's the neutral default, not an event worth interrupting for.
@@ -80,7 +85,7 @@ class ChatApp(App[None]):
                 yield VerticalScroll(id="log")
                 yield WaitingIndicator(id="waiting")
                 yield Input(
-                    placeholder="Message bpx…   (/new · /model · /keywords · /help)", id="prompt"
+                    placeholder="Message bpx…   (/model · /keywords · /memory · /help)", id="prompt"
                 )
         yield Footer()
 
@@ -266,13 +271,15 @@ class ChatApp(App[None]):
             self.exit()
         elif command in ("keywords", "keys"):
             self.action_keywords()
+        elif command in ("memory", "mem"):
+            self.action_memory()
         elif command == "help":
             self.notify(
-                "/new · /delete · /model [name] · /keywords · /help · /quit",
+                "/new · /delete · /model [name] · /keywords · /memory · /help · /quit",
                 title="Commands",
                 timeout=6,
             )
-        elif command in ("project", "rag", "search", "memory"):
+        elif command in ("project", "rag", "search"):
             self.notify(f"/{command} arrives in a later phase.")
         else:
             self.notify(f"Unknown command: /{command}", severity="warning")
@@ -308,6 +315,15 @@ class ChatApp(App[None]):
         """Show the persona trigger-word lookup (Ctrl+K / /keywords)."""
         self.push_screen(KeywordHelp(lexicons()))
 
+    def action_memory(self) -> None:
+        """View/delete the project's remembered facts (/memory)."""
+        assert self.store is not None and self._project_id is not None
+        self.push_screen(MemoryList(self.store.list_memories(self._project_id), self._delete_memory))
+
+    def _delete_memory(self, memory_id: int) -> None:
+        assert self.store is not None
+        self.store.delete_memory(memory_id)
+
     def _on_model_picked(self, name: str | None) -> None:
         if name:
             self._switch_model(name)
@@ -319,11 +335,21 @@ class ChatApp(App[None]):
             title = text.splitlines()[0][:40].strip() or DEFAULT_TITLE
             self.store.set_title(self.conversation_id, title)
 
+    def _memory_prompt(self) -> list[Message]:
+        """A leading system message of project memories (R6, §9), or empty if none."""
+        assert self.store is not None and self._project_id is not None
+        facts = [
+            m.content
+            for m in self.store.list_memories(self._project_id, limit=memory.INJECT_LIMIT)
+        ]
+        system = memory.system_prompt(facts)
+        return [Message("system", system)] if system else []
+
     @work(exclusive=True)
     async def generate(self) -> None:
         assert self.store is not None and self.conversation_id is not None
         conversation_id = self.conversation_id
-        prompt = [
+        prompt = self._memory_prompt() + [
             Message(m.role, m.content)
             for m in self.store.list_messages(conversation_id)
             if m.content and m.role in ("user", "assistant")  # skip event/log rows
@@ -357,6 +383,36 @@ class ChatApp(App[None]):
             waiting.stop(cancelled=cancelled)
             self.store.update_message(assistant_id, acc, complete=not cancelled)
             self.store.touch(conversation_id)
+        # Only on a clean finish (so a cancelled/partial turn doesn't feed extraction).
+        self._maybe_extract_memory(conversation_id)
+
+    def _maybe_extract_memory(self, conversation_id: int) -> None:
+        """Every MEMORY_EVERY messages, kick off background fact extraction (R6, §9)."""
+        assert self.store is not None
+        turns = [
+            m for m in self.store.list_messages(conversation_id) if m.role in ("user", "assistant")
+        ]
+        if turns and len(turns) % MEMORY_EVERY == 0:
+            self.extract_memory(conversation_id)
+
+    @work(group="memory")
+    async def extract_memory(self, conversation_id: int) -> None:
+        """Background: extract durable user facts and store the new ones. Never raises into the UI
+        (memory.extract_facts swallows errors); a non-thinking client keeps it fast + clean JSON."""
+        assert self.store is not None and self._project_id is not None
+        transcript = [
+            Message(m.role, m.content)
+            for m in self.store.list_messages(conversation_id)
+            if m.content and m.role in ("user", "assistant")
+        ]
+        existing = [m.content for m in self.store.list_memories(self._project_id)]
+        spec = replace(self.registry.get(DEFAULT_MODEL), reasoning_effort="none")
+        client = self._client_factory(spec)
+        new_facts = await memory.extract_facts(client, existing, transcript)
+        for fact in new_facts:
+            self.store.add_memory(self._project_id, fact)
+        if new_facts:
+            self.notify(f"Remembered {len(new_facts)} new fact(s) · /memory", title="Memory")
 
     def action_cancel(self) -> None:
         self.workers.cancel_all()
