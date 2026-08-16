@@ -51,7 +51,19 @@ at or delete the notes anytime with `/memory`. Two nice touches: the note-taking
 background so it never slows your chat, and it works whether you're talking to the plain assistant
 or a persona.
 
+**Phase 3 (cont.) — letting it read your documents (RAG).** Language models only know what they
+were trained on — not *your* PDF. So we added the ability to drop in a document (`/rag add
+paper.pdf`) and ask about it. Behind the scenes: the document is sliced into overlapping passages,
+and each passage is turned into a list of numbers (an "embedding") that captures its meaning.
+Your question gets the same treatment, and we find the passages whose numbers are closest — that's
+the retrieval. But we don't do it naively: a **judge** first decides whether your question even
+needs the documents (asking "what's 2+2?" shouldn't rummage through your files); a **rewriter**
+turns your question into a good search query; if the first passages aren't enough, it **searches
+again** (up to three tries); and a **summarizer** boils the hits down to the relevant bits. The
+model then answers using only those passages and **cites its sources** (`[1]`), so you can check
+it didn't make things up. All local — the document never leaves your machine.
+
 ## Where we are now
 
-Both personas are trained, measured, and wired in; the app now has a cross-chat memory. Still to
-come: letting it **search your own documents** and **the web**.
+Both personas are trained, measured, and wired in; the app has a cross-chat memory and can answer
+questions about your own documents with citations. Still to come: letting it **search the web**.

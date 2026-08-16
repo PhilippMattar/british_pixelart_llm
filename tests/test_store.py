@@ -144,3 +144,19 @@ def test_memories_add_list_delete_scoped(tmp_path):
     store.delete_memory(first)
     assert [m.content for m in store.list_memories(pid)] == ["fact B"]
     store.close()
+
+
+def test_rag_documents_and_chunks_cascade(tmp_path):
+    store = Store.open(tmp_path / "r.db")
+    pid = store.default_project_id()
+    did = store.add_document(pid, "/x/paper.pdf", "paper.pdf")
+    store.add_chunks(did, pid, [(0, "chunk zero", b"\x00\x00\x80?"), (1, "chunk one", b"\x00\x00\x00@")])
+    docs = store.list_documents(pid)
+    assert len(docs) == 1 and docs[0].title == "paper.pdf"
+    chunks = store.rag_chunks_for_search(pid)
+    assert {c.content for c in chunks} == {"chunk zero", "chunk one"}
+    assert all(c.document_title == "paper.pdf" for c in chunks)
+    store.delete_document(did)  # chunks cascade via the FK
+    assert store.list_documents(pid) == []
+    assert store.rag_chunks_for_search(pid) == []
+    store.close()

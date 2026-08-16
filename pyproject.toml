@@ -9,6 +9,7 @@ authors = [{ name = "Philipp Mattar" }]
 dependencies = [
     "textual>=0.85",
     "openai>=1.51",
+    "pypdf>=6.16.1",
 ]
 
 [project.scripts]
