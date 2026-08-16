@@ -207,6 +207,38 @@ async def test_memory_modal_lists_and_deletes(db):
         assert remaining == ["The user lives in Berlin."]
 
 
+def test_drop_paths_detects_files_only(tmp_path):
+    from bpx.app import drop_paths
+
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_text("x")
+    spaced = tmp_path / "My Paper.pdf"
+    spaced.write_text("x")
+    script = tmp_path / "code.py"
+    script.write_text("x")
+
+    assert drop_paths(str(pdf)) == [pdf]
+    assert drop_paths(f"'{pdf}'") == [pdf]  # quoted (some terminals)
+    assert drop_paths(f"{pdf} \n") == [pdf]  # trailing whitespace
+    assert drop_paths(str(spaced).replace(" ", "\\ ")) == [spaced]  # escaped space (macOS)
+    assert drop_paths(pdf.as_uri()) == [pdf]  # file:// URL
+    assert drop_paths("what does this paper say?") == []  # normal message
+    assert drop_paths(str(tmp_path / "missing.pdf")) == []  # not a real file
+    assert drop_paths(str(script)) == []  # not an ingestable type
+
+
+async def test_dropped_pdf_ingests_not_sends(db, tmp_path):
+    doc = tmp_path / "dropped.txt"
+    doc.write_text("apple banana cherry " * 50)
+    app = ChatApp(client_factory=_factory(), embedder_factory=lambda base: _FakeEmbedder())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, str(doc))  # "type" the dropped path + Enter
+        await app.workers.wait_for_complete()
+        pid = app.store.default_project_id()
+        assert [d.title for d in app.store.list_documents(pid)] == ["dropped.txt"]
+        assert app.store.list_messages(app.conversation_id) == []  # not sent as a chat message
+
+
 class _FakeEmbedder:
     async def embed(self, texts):
         return [[float(len(t)), 1.0] for t in texts]
