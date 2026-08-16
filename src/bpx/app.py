@@ -18,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown
 
-from .llm import LLMClient, Message
+from .llm import Chunk, LLMClient, Message
 from .registry import ModelSpec, Registry, client_for
 from .router.keywords import detect
 from .store import Store
@@ -26,8 +26,12 @@ from .widgets.model_picker import ModelPicker
 from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
+# The standard, non-persona model every new conversation starts on (§8). Personas are an overlay
+# the keyword router switches to and reverts from; they never become a conversation's base.
+DEFAULT_MODEL = "qwen"
 
-# Toast shown when the keyword router auto-switches persona (§8).
+# Toast shown when the keyword router auto-switches persona (§8). Reverting to the base model is
+# silent — it's the neutral default, not an event worth interrupting for.
 _SWITCH_TOASTS = {
     "british": "Switching to British mode, mate 🇬🇧",
     "scottish": "Switching to Scottish mode, aye 🏴󠁧󠁢󠁳󠁣󠁴󠁿",
@@ -61,7 +65,7 @@ class ChatApp(App[None]):
         self.registry = Registry.load()
         self._client_factory = client_factory
         self.store: Store | None = None
-        self.model_name = "qwen"
+        self.model_name = DEFAULT_MODEL
         self.conversation_id: int | None = None
         self._project_id: int | None = None
         self._conversation_ids: list[int] = []
@@ -83,7 +87,7 @@ class ChatApp(App[None]):
         conversation_id = (
             conversations[0].id
             if conversations
-            else self.store.create_conversation(self._project_id, self.model_name)
+            else self.store.create_conversation(self._project_id, DEFAULT_MODEL)
         )
         await self._load_conversation(conversation_id)
         await self._refresh_sidebar()
@@ -99,9 +103,18 @@ class ChatApp(App[None]):
         return f"**You**\n\n{content}"
 
     @staticmethod
-    def _assistant_md(content: str, model: str, *, stopped: bool = False) -> str:
+    def _assistant_md(
+        content: str, model: str, *, reasoning: str = "", stopped: bool = False
+    ) -> str:
         marker = " _(stopped)_" if stopped else ""
-        return f"**{model}**{marker}\n\n{content or '…'}"
+        if content:
+            return f"**{model}**{marker}\n\n{content}"
+        if reasoning:
+            # Thinking-mode progress: show the reasoning dimmed, as a quote, until the answer
+            # starts — so a long think never looks like a frozen/blank reply.
+            quoted = "\n".join(f"> {line}" for line in reasoning.splitlines())
+            return f"**{model}** _💭 thinking…_\n\n{quoted}"
+        return f"**{model}**{marker}\n\n…"
 
     @staticmethod
     def _event_md(content: str) -> str:
@@ -174,7 +187,8 @@ class ChatApp(App[None]):
 
     async def action_new_conversation(self) -> None:
         assert self.store is not None and self._project_id is not None
-        conversation_id = self.store.create_conversation(self._project_id, self.model_name)
+        # Always start fresh on the standard model, not whatever the last conversation drifted to.
+        conversation_id = self.store.create_conversation(self._project_id, DEFAULT_MODEL)
         await self._load_conversation(conversation_id)
         await self._refresh_sidebar()
         self.query_one("#prompt", Input).focus()
@@ -188,7 +202,7 @@ class ChatApp(App[None]):
         next_id = (
             remaining[0].id
             if remaining
-            else self.store.create_conversation(self._project_id, self.model_name)
+            else self.store.create_conversation(self._project_id, DEFAULT_MODEL)
         )
         await self._load_conversation(next_id)
         await self._refresh_sidebar()
@@ -212,21 +226,23 @@ class ChatApp(App[None]):
         self.generate()
 
     async def _maybe_auto_switch(self, text: str) -> None:
-        """Keyword router (§8): switch persona on a lexicon hit, unless this conversation
-        has been pinned by a manual /model. Logs the switch into the chat so history is honest."""
+        """Keyword router (§8): a lexicon hit overlays that persona; no hit reverts to the
+        conversation's base model. Skipped when a manual /model has pinned a persona. Switching
+        to a persona shows a toast; reverting to the base is silent (the neutral default)."""
         assert self.store is not None and self.conversation_id is not None
         conversation = self.store.get_conversation(self.conversation_id)
         if conversation is None or not conversation.auto_switch:
             return
         persona = detect(text)
-        if persona is None or persona == self.model_name or persona not in self.registry.names():
+        # No keyword (or an unknown persona) -> fall back to the base model, not the current one.
+        target = persona if persona in self.registry.names() else conversation.base_model
+        if target == self.model_name:
             return
-        self.model_name = persona
-        self.store.set_model(self.conversation_id, persona)
+        self.model_name = target
+        self.store.set_model(self.conversation_id, target)
         self._update_status()
-        self.notify(_SWITCH_TOASTS.get(persona, f"Switching to {persona}"))
-        self.store.add_message(self.conversation_id, "event", f"auto-switched to {persona}")
-        await self._mount(self._event_md(f"auto-switched to {persona}"))
+        if target == persona:
+            self.notify(_SWITCH_TOASTS.get(persona, f"Switching to {persona}"))
 
     # -- slash commands --
     async def _handle_command(self, text: str) -> None:
@@ -265,9 +281,17 @@ class ChatApp(App[None]):
         assert self.conversation_id is not None and self.store is not None
         self.model_name = name
         self.store.set_model(self.conversation_id, name)
-        self.store.set_auto_switch(self.conversation_id, False)  # manual choice pins (§8)
+        if self.registry.get(name).is_persona:
+            # Manually choosing a persona pins it: no keyword routing until you pick a base again.
+            self.store.set_auto_switch(self.conversation_id, False)
+            self.notify(f"Model → {name} (pinned)")
+        else:
+            # Choosing a base model sets the fallback and keeps keyword routing on, so personas
+            # still overlay and revert to *this* base.
+            self.store.set_base_model(self.conversation_id, name)
+            self.store.set_auto_switch(self.conversation_id, True)
+            self.notify(f"Model → {name}")
         self._update_status()
-        self.notify(f"Model → {name} (auto-switch off)")
 
     def action_model_picker(self) -> None:
         self.push_screen(
@@ -303,11 +327,18 @@ class ChatApp(App[None]):
         waiting = self.query_one("#waiting", WaitingIndicator)
         waiting.start()
         acc = ""
+        reasoning = ""
         cancelled = False
         try:
-            async for delta in client.stream(prompt):
-                acc += delta
-                await bubble.update(self._assistant_md(acc, self.model_name))
+            async for chunk in client.stream(prompt):
+                # Tolerate a plain-string stream (test fakes) as content; real client yields Chunk.
+                kind = getattr(chunk, "kind", "content")
+                text = getattr(chunk, "text", chunk)
+                if kind == "reasoning":
+                    reasoning += text
+                else:
+                    acc += text
+                await bubble.update(self._assistant_md(acc, self.model_name, reasoning=reasoning))
                 log.scroll_end(animate=False)
         except CancelledError:
             cancelled = True

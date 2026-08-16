@@ -19,6 +19,15 @@ class Message:
     content: str
 
 
+@dataclass(frozen=True)
+class Chunk:
+    """One streamed delta. `kind` is "content" (the answer) or "reasoning" (thinking-mode
+    tokens, surfaced so a long think shows visible progress instead of a frozen UI)."""
+
+    kind: str
+    text: str
+
+
 class LLMClient:
     def __init__(
         self, *, base_url: str, api_key: str, model_id: str, reasoning_effort: str = ""
@@ -32,11 +41,13 @@ class LLMClient:
         self._extra_body = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key)
 
-    async def stream(self, messages: list[Message]) -> AsyncIterator[str]:
-        """Yield content deltas as they arrive.
+    async def stream(self, messages: list[Message]) -> AsyncIterator[Chunk]:
+        """Yield reasoning and content deltas as they arrive, tagged by kind.
 
-        Cancelling the consuming task stops generation: the underlying HTTP stream is
-        closed in the finally block.
+        Thinking-mode models (e.g. the standard qwen3) emit `reasoning` deltas before any
+        `content`; we surface both so a long think shows progress rather than a frozen UI.
+        Cancelling the consuming task stops generation: the underlying HTTP stream is closed
+        in the finally block.
         """
         stream = await self._client.chat.completions.create(
             model=self.model_id,
@@ -48,8 +59,15 @@ class LLMClient:
             async for chunk in stream:
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
+                delta = chunk.choices[0].delta
+                if delta is None:
+                    continue
+                reasoning = getattr(delta, "reasoning", None) or getattr(
+                    delta, "reasoning_content", None
+                )
+                if reasoning:
+                    yield Chunk("reasoning", reasoning)
+                if delta.content:
+                    yield Chunk("content", delta.content)
         finally:
             await stream.close()

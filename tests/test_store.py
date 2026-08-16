@@ -119,3 +119,16 @@ def test_auto_switch_defaults_on_and_persists(tmp_path):
     reopened = Store.open(db)
     assert reopened.get_conversation(cid).auto_switch is False  # persisted
     reopened.close()
+
+
+def test_base_model_defaults_and_persists(tmp_path):
+    db = tmp_path / "bpx.db"
+    store = Store.open(db)
+    cid = store.create_conversation(store.default_project_id(), "qwen")
+    assert store.get_conversation(cid).base_model == "qwen"  # migration 004 default
+    store.set_base_model(cid, "gemma")
+    store.close()
+
+    reopened = Store.open(db)
+    assert reopened.get_conversation(cid).base_model == "gemma"  # persisted
+    reopened.close()
