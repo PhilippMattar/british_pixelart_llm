@@ -132,3 +132,15 @@ def test_base_model_defaults_and_persists(tmp_path):
     reopened = Store.open(db)
     assert reopened.get_conversation(cid).base_model == "gemma"  # persisted
     reopened.close()
+
+
+def test_memories_add_list_delete_scoped(tmp_path):
+    store = Store.open(tmp_path / "m.db")
+    pid = store.default_project_id()
+    first = store.add_memory(pid, "fact A")
+    store.add_memory(pid, "fact B")
+    assert [m.content for m in store.list_memories(pid)] == ["fact B", "fact A"]  # newest first
+    assert [m.content for m in store.list_memories(pid, limit=1)] == ["fact B"]  # top-k cap
+    store.delete_memory(first)
+    assert [m.content for m in store.list_memories(pid)] == ["fact B"]
+    store.close()

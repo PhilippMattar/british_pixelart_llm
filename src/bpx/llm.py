@@ -71,3 +71,13 @@ class LLMClient:
                     yield Chunk("content", delta.content)
         finally:
             await stream.close()
+
+    async def complete(self, messages: list[Message]) -> str:
+        """Non-streaming completion — for background tasks (memory extraction) that want the whole
+        answer, not deltas. Any reasoning is discarded; only the content is returned."""
+        resp = await self._client.chat.completions.create(
+            model=self.model_id,
+            messages=[{"role": m.role, "content": m.content} for m in messages],
+            extra_body=self._extra_body,
+        )
+        return resp.choices[0].message.content or ""

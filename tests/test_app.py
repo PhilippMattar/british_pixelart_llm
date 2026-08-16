@@ -7,18 +7,25 @@ from bpx.widgets.spinner import WaitingIndicator
 
 
 class _FakeClient:
-    """Stand-in for LLMClient — streams fixed deltas, no network."""
+    """Stand-in for LLMClient — streams fixed deltas, no network. `complete` returns a canned
+    string for the memory extractor (default "[]" -> no facts, so most tests ignore memory)."""
 
-    def __init__(self, deltas):
+    def __init__(self, deltas, completion="[]"):
         self._deltas = list(deltas)
+        self._completion = completion
+        self.seen_messages: list = []  # last stream()'s messages, for assertions
 
     async def stream(self, messages):
+        self.seen_messages = list(messages)
         for delta in self._deltas:
             yield delta
 
+    async def complete(self, messages):
+        return self._completion
 
-def _factory(*deltas):
-    return lambda spec: _FakeClient(deltas or ("hello", " there"))
+
+def _factory(*deltas, completion="[]"):
+    return lambda spec: _FakeClient(deltas or ("hello", " there"), completion=completion)
 
 
 async def _send(app, pilot, text):
@@ -153,6 +160,51 @@ async def test_keywords_help_opens_and_closes(db):
         app.screen.action_close()
         await pilot.pause()
         assert not isinstance(app.screen, KeywordHelp)  # dismissed back to the main screen
+
+
+async def test_memory_injected_as_system_prompt(db):
+    client = _FakeClient(("ok",))
+    app = ChatApp(client_factory=lambda spec: client)
+    async with app.run_test() as pilot:
+        app.store.add_memory(app.store.default_project_id(), "The user is vegetarian.")
+        await _send(app, pilot, "what should I cook?")
+        assert client.seen_messages[0].role == "system"  # memory injected first
+        assert "vegetarian" in client.seen_messages[0].content
+
+
+async def test_no_memory_means_no_system_prompt(db):
+    client = _FakeClient(("ok",))
+    app = ChatApp(client_factory=lambda spec: client)
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "hello")
+        assert client.seen_messages[0].role == "user"  # nothing injected
+
+
+async def test_memory_extraction_stores_new_facts(db):
+    facts = '["The user is called Sam.", "The user likes hiking."]'
+    app = ChatApp(client_factory=_factory("ok", completion=facts))
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "Hi, I'm Sam.")  # 2 turns
+        await _send(app, pilot, "Tell me more.")  # 4 turns -> extraction fires
+        contents = [m.content for m in app.store.list_memories(app.store.default_project_id())]
+        assert "The user is called Sam." in contents
+        assert "The user likes hiking." in contents
+
+
+async def test_memory_modal_lists_and_deletes(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        pid = app.store.default_project_id()
+        mid = app.store.add_memory(pid, "The user is vegetarian.")
+        app.store.add_memory(pid, "The user lives in Berlin.")
+        app.action_memory()
+        await pilot.pause()
+        from bpx.widgets.memory_list import MemoryList
+
+        assert isinstance(app.screen, MemoryList)
+        app._delete_memory(mid)  # the modal's delete callback
+        remaining = [m.content for m in app.store.list_memories(pid)]
+        assert remaining == ["The user lives in Berlin."]
 
 
 def _sidebar_count(app) -> int:
