@@ -37,6 +37,11 @@ _PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 
+def lexicons() -> dict[str, list[str]]:
+    """The trigger words per persona (copied), for the /keywords lookup UI."""
+    return {persona: list(words) for persona, words in _LEXICONS.items()}
+
+
 def hits(text: str) -> dict[str, int]:
     """Number of lexicon matches per persona (handy for tests/debugging)."""
     return {persona: len(pattern.findall(text)) for persona, pattern in _PATTERNS.items()}

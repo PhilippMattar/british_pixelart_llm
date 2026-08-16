@@ -30,8 +30,12 @@ themselves are placeholders until Phase-2 training lands.
   conversations start on `DEFAULT_MODEL` ("qwen"), never the last conversation's persona.
   `_switch_model` branches: a **persona** pins (`auto_switch = False`); a **base** model sets
   `base_model` and keeps routing on.
-- Tests: router unit (dialects, `checkmate`/`whiskey`/place-name false positives, ambiguity),
-  app integration (overlay + revert-to-base, persona pin, new-conversation reset), store.
+- `src/bpx/widgets/keyword_help.py` — a read-only `KeywordHelp` modal listing every trigger word
+  per persona, opened by **Ctrl+K** or `/keywords` (`keywords.lexicons()` exposes the words).
+  The lexicons are impossible to memorise, so this is the in-app lookup.
+- Tests: router unit (dialects, `checkmate`/`whiskey`/place-name false positives, ambiguity,
+  `lexicons()`), app integration (overlay + revert-to-base, persona pin, new-conversation reset,
+  keyword-help modal), store.
 
 ## Core concepts
 

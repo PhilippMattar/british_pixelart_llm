@@ -1,4 +1,11 @@
-from bpx.router.keywords import detect, hits
+from bpx.router.keywords import detect, hits, lexicons
+
+
+def test_lexicons_lists_triggers_and_is_a_copy():
+    lex = lexicons()
+    assert "mate" in lex["british"] and "dreich" in lex["scottish"]
+    lex["british"].append("zzz")  # mutating the copy must not leak into detection
+    assert detect("zzz") is None
 
 
 def test_detects_british():
