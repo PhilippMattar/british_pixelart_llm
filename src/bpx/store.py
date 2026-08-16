@@ -111,6 +111,31 @@ def _migration_005(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id)")
 
 
+def _migration_006(conn: sqlite3.Connection) -> None:
+    # RAG store (Elective 1, §10): ingested documents and their embedded chunks, project-scoped.
+    # Embeddings are float32 BLOBs; similarity search is brute-force cosine in Python (this
+    # Python's sqlite3 can't load the sqlite-vec extension, and we don't need an ANN index at
+    # this scale). IF NOT EXISTS keeps the migration-002 rewind test safe.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS rag_documents ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,"
+        " path TEXT NOT NULL,"
+        " title TEXT NOT NULL,"
+        " added_at TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS rag_chunks ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " document_id INTEGER NOT NULL REFERENCES rag_documents(id) ON DELETE CASCADE,"
+        " project_id INTEGER NOT NULL,"
+        " chunk_index INTEGER NOT NULL,"
+        " content TEXT NOT NULL,"
+        " embedding BLOB NOT NULL)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rag_chunks_project ON rag_chunks(project_id)")
+
+
 # Ordered; MIGRATIONS[i] upgrades version i -> i+1.
 MIGRATIONS = [
     _migration_001,
@@ -118,6 +143,7 @@ MIGRATIONS = [
     _migration_003,
     _migration_004,
     _migration_005,
+    _migration_006,
 ]
 
 
@@ -142,6 +168,24 @@ class Memory:
     project_id: int
     content: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class RagDocument:
+    id: int
+    project_id: int
+    path: str
+    title: str
+    added_at: str
+
+
+@dataclass(frozen=True)
+class RagChunk:
+    id: int
+    document_title: str
+    chunk_index: int
+    content: str
+    embedding: bytes
 
 
 @dataclass(frozen=True)
@@ -319,6 +363,53 @@ class Store:
     def delete_memory(self, memory_id: int) -> None:
         with self._conn:
             self._conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+
+    # -- RAG documents + chunks (Elective 1, §10) --
+    def add_document(self, project_id: int, path: str, title: str) -> int:
+        with self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO rag_documents (project_id, path, title, added_at) VALUES (?, ?, ?, ?)",
+                (project_id, path, title, _now()),
+            )
+        return int(cur.lastrowid)
+
+    def add_chunks(
+        self, document_id: int, project_id: int, chunks: list[tuple[int, str, bytes]]
+    ) -> None:
+        """Bulk-insert (chunk_index, content, embedding-bytes) rows for one document."""
+        with self._conn:
+            self._conn.executemany(
+                "INSERT INTO rag_chunks (document_id, project_id, chunk_index, content, embedding)"
+                " VALUES (?, ?, ?, ?, ?)",
+                [(document_id, project_id, i, content, emb) for i, content, emb in chunks],
+            )
+
+    def list_documents(self, project_id: int) -> list[RagDocument]:
+        rows = self._conn.execute(
+            "SELECT * FROM rag_documents WHERE project_id = ? ORDER BY id DESC", (project_id,)
+        ).fetchall()
+        return [
+            RagDocument(r["id"], r["project_id"], r["path"], r["title"], r["added_at"])
+            for r in rows
+        ]
+
+    def delete_document(self, document_id: int) -> None:
+        # Chunks cascade via the FK.
+        with self._conn:
+            self._conn.execute("DELETE FROM rag_documents WHERE id = ?", (document_id,))
+
+    def rag_chunks_for_search(self, project_id: int) -> list[RagChunk]:
+        """Every chunk for the project (with its document title), for brute-force cosine ranking."""
+        rows = self._conn.execute(
+            "SELECT c.id, d.title AS title, c.chunk_index, c.content, c.embedding"
+            " FROM rag_chunks c JOIN rag_documents d ON d.id = c.document_id"
+            " WHERE c.project_id = ?",
+            (project_id,),
+        ).fetchall()
+        return [
+            RagChunk(r["id"], r["title"], r["chunk_index"], r["content"], r["embedding"])
+            for r in rows
+        ]
 
     def list_messages(self, conversation_id: int) -> list[StoredMessage]:
         rows = self._conn.execute(

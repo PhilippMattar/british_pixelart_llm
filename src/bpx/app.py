@@ -1,11 +1,12 @@
 """Textual chat app with a conversation sidebar and SQLite persistence (Phase 1).
 
-See PLAN.md §5, §9. A left sidebar lists conversations (newest first); the right pane is
+See PLAN.md §5, §9, §10. A left sidebar lists conversations (newest first); the right pane is
 the streaming chat log + input. Conversations are created/switched/removed (R4) and each
-resumes with full scrollback (R3). Slash commands drive it: `/new`, `/delete`, `/model`,
-`/help`, `/quit`. The active model is pinned per conversation and shown in the Header badge
-(R5). British/Scottish keywords auto-switch the persona (§8) unless a manual `/model` has
-pinned the conversation. `client_factory` is injectable so tests can supply a fake client.
+resumes with full scrollback (R3). Slash commands: `/new`, `/delete`, `/model`, `/keywords`,
+`/memory`, `/rag add <path>`, `/help`, `/quit`. British/Scottish keywords overlay a persona on
+the conversation's base model (§8); project memories (§9) and RAG document context (§10) are
+injected as system messages. `client_factory` / `embedder_factory` are injectable so tests can
+supply fakes.
 """
 
 from __future__ import annotations
@@ -19,14 +20,19 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown
 
+from pathlib import Path
+
 from . import memory
 from .llm import Chunk, LLMClient, Message
+from .rag import pipeline as rag
+from .rag.embed import Embedder
 from .registry import ModelSpec, Registry, client_for
 from .router.keywords import detect, lexicons
 from .store import Store
 from .widgets.keyword_help import KeywordHelp
 from .widgets.memory_list import MemoryList
 from .widgets.model_picker import ModelPicker
+from .widgets.rag_list import RagList
 from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
@@ -66,11 +72,15 @@ class ChatApp(App[None]):
     ]
 
     def __init__(
-        self, *, client_factory: Callable[[ModelSpec], LLMClient] = client_for
+        self,
+        *,
+        client_factory: Callable[[ModelSpec], LLMClient] = client_for,
+        embedder_factory: Callable[[str], Embedder] = Embedder,
     ) -> None:
         super().__init__()
         self.registry = Registry.load()
         self._client_factory = client_factory
+        self._embedder_factory = embedder_factory
         self.store: Store | None = None
         self.model_name = DEFAULT_MODEL
         self.conversation_id: int | None = None
@@ -273,13 +283,21 @@ class ChatApp(App[None]):
             self.action_keywords()
         elif command in ("memory", "mem"):
             self.action_memory()
+        elif command == "rag":
+            sub = arg.split(maxsplit=1)
+            if sub and sub[0].lower() == "add" and len(sub) > 1:
+                self._rag_add(sub[1])
+            elif not arg or arg.lower() in ("list", "ls"):
+                self.action_rag()
+            else:
+                self.notify("Usage: /rag add <path>  ·  /rag (to list)", severity="warning")
         elif command == "help":
             self.notify(
-                "/new · /delete · /model [name] · /keywords · /memory · /help · /quit",
+                "/new · /model · /keywords · /memory · /rag add <path> · /help · /quit",
                 title="Commands",
                 timeout=6,
             )
-        elif command in ("project", "rag", "search"):
+        elif command in ("project", "search"):
             self.notify(f"/{command} arrives in a later phase.")
         else:
             self.notify(f"Unknown command: /{command}", severity="warning")
@@ -345,15 +363,39 @@ class ChatApp(App[None]):
         system = memory.system_prompt(facts)
         return [Message("system", system)] if system else []
 
+    def _control_client(self) -> LLMClient:
+        """A non-thinking client on the default model for background/control calls (memory, RAG)."""
+        return self._client_factory(replace(self.registry.get(DEFAULT_MODEL), reasoning_effort="none"))
+
+    def _embedder(self) -> Embedder:
+        return self._embedder_factory(self.registry.get(DEFAULT_MODEL).endpoint)
+
+    async def _rag_context(
+        self, query: str, history: list[Message]
+    ) -> tuple[list[Message], list[str]]:
+        """Run the adaptive-RAG pipeline if the project has documents (§10). Returns a leading
+        system message (source-tagged context) and the source legend, or empty if not retrieving."""
+        assert self.store is not None and self._project_id is not None
+        if not query or not self.store.list_documents(self._project_id):
+            return [], []
+        embedder = self._embedder()
+        result = await rag.build_context(
+            self._control_client(), embedder, self.store, self._project_id, query, history
+        )
+        if result is None:
+            return [], []
+        return [Message("system", result.context)], result.sources
+
     @work(exclusive=True)
     async def generate(self) -> None:
         assert self.store is not None and self.conversation_id is not None
         conversation_id = self.conversation_id
-        prompt = self._memory_prompt() + [
+        history = [
             Message(m.role, m.content)
             for m in self.store.list_messages(conversation_id)
             if m.content and m.role in ("user", "assistant")  # skip event/log rows
         ]
+        query = history[-1].content if history and history[-1].role == "user" else ""
         client = self._client_factory(self.registry.get(self.model_name))
         assistant_id = self.store.add_message(
             conversation_id, "assistant", "", model_name=self.model_name, complete=False
@@ -364,8 +406,12 @@ class ChatApp(App[None]):
         waiting.start()
         acc = ""
         reasoning = ""
+        rag_sources: list[str] = []
         cancelled = False
         try:
+            # Adaptive RAG runs before generation (slow LLM/embedding calls) — the spinner covers it.
+            rag_msgs, rag_sources = await self._rag_context(query, history)
+            prompt = self._memory_prompt() + rag_msgs + history
             async for chunk in client.stream(prompt):
                 # Tolerate a plain-string stream (test fakes) as content; real client yields Chunk.
                 kind = getattr(chunk, "kind", "content")
@@ -381,6 +427,9 @@ class ChatApp(App[None]):
             raise
         finally:
             waiting.stop(cancelled=cancelled)
+            if rag_sources and acc and not cancelled:  # show which sources the answer used
+                acc = acc.rstrip() + "\n\n---\n**Sources**\n" + "\n".join(rag_sources)
+                await bubble.update(self._assistant_md(acc, self.model_name))
             self.store.update_message(assistant_id, acc, complete=not cancelled)
             self.store.touch(conversation_id)
         # Only on a clean finish (so a cancelled/partial turn doesn't feed extraction).
@@ -406,13 +455,41 @@ class ChatApp(App[None]):
             if m.content and m.role in ("user", "assistant")
         ]
         existing = [m.content for m in self.store.list_memories(self._project_id)]
-        spec = replace(self.registry.get(DEFAULT_MODEL), reasoning_effort="none")
-        client = self._client_factory(spec)
-        new_facts = await memory.extract_facts(client, existing, transcript)
+        new_facts = await memory.extract_facts(self._control_client(), existing, transcript)
         for fact in new_facts:
             self.store.add_memory(self._project_id, fact)
         if new_facts:
             self.notify(f"Remembered {len(new_facts)} new fact(s) · /memory", title="Memory")
+
+    # -- RAG documents (/rag) --
+    def action_rag(self) -> None:
+        """View/delete ingested documents (/rag)."""
+        assert self.store is not None and self._project_id is not None
+        self.push_screen(RagList(self.store.list_documents(self._project_id), self._delete_document))
+
+    def _delete_document(self, document_id: int) -> None:
+        assert self.store is not None
+        self.store.delete_document(document_id)
+
+    def _rag_add(self, raw_path: str) -> None:
+        path = Path(raw_path.strip().strip("'\"")).expanduser()
+        if not path.is_file():
+            self.notify(f"No such file: {path}", severity="warning")
+            return
+        self.notify(f"Indexing {path.name}…", title="RAG")
+        self.ingest_document(str(path))
+
+    @work(group="rag")
+    async def ingest_document(self, path: str) -> None:
+        """Background: chunk + embed a document into the project's RAG store (§10)."""
+        assert self.store is not None and self._project_id is not None
+        embedder = self._embedder()
+        try:
+            _, n_chunks = await rag.ingest_document(self.store, embedder, self._project_id, path)
+        except Exception as exc:  # bad file / extraction / embedding failure
+            self.notify(f"Could not index {Path(path).name}: {exc}", severity="error", title="RAG")
+            return
+        self.notify(f"Indexed {Path(path).name} · {n_chunks} chunks · /rag", title="RAG")
 
     def action_cancel(self) -> None:
         self.workers.cancel_all()

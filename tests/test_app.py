@@ -207,6 +207,41 @@ async def test_memory_modal_lists_and_deletes(db):
         assert remaining == ["The user lives in Berlin."]
 
 
+class _FakeEmbedder:
+    async def embed(self, texts):
+        return [[float(len(t)), 1.0] for t in texts]
+
+    async def embed_one(self, text):
+        return (await self.embed([text]))[0]
+
+
+async def test_rag_add_ingests_document(db, tmp_path):
+    doc = tmp_path / "notes.txt"
+    doc.write_text("apple banana cherry " * 100)
+    app = ChatApp(client_factory=_factory(), embedder_factory=lambda base: _FakeEmbedder())
+    async with app.run_test() as pilot:
+        await _command(app, pilot, f"/rag add {doc}")
+        await app.workers.wait_for_complete()
+        pid = app.store.default_project_id()
+        docs = app.store.list_documents(pid)
+        assert len(docs) == 1 and docs[0].title == "notes.txt"
+        assert len(app.store.rag_chunks_for_search(pid)) >= 1
+
+
+async def test_rag_modal_lists_and_deletes(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        pid = app.store.default_project_id()
+        did = app.store.add_document(pid, "/x/a.txt", "a.txt")
+        app.action_rag()
+        await pilot.pause()
+        from bpx.widgets.rag_list import RagList
+
+        assert isinstance(app.screen, RagList)
+        app._delete_document(did)
+        assert app.store.list_documents(pid) == []
+
+
 def _sidebar_count(app) -> int:
     return len(app.query_one("#sidebar", ListView).children)
 
