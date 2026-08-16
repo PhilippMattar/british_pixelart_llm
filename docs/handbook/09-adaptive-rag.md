@@ -29,6 +29,9 @@ in a third route.
   before answering (spinner covers it), injects the source-tagged block as a system message, and
   appends the **Sources** legend to the reply. `/rag` opens the document modal.
 - `src/bpx/widgets/rag_list.py` — the `RagList` modal (view/delete documents).
+- Drag-and-drop: `drop_paths()` recognises when the prompt's text is actually a dropped file path
+  (quotes, `file://` URLs, macOS backslash-escaped spaces) and routes it to `/rag` instead of
+  sending it as a message — so dragging a PDF in and pressing Enter ingests it.
 
 ## Core concepts
 
@@ -77,3 +80,7 @@ in a third route.
   model; `from_blob`/`cosine` assume equal length.
 - **Chunk size approximates tokens by words** (~350 words ≈ 500 tokens) — fine for retrieval;
   swap in a real tokenizer if precision ever matters.
+- **Terminal "drag-and-drop" is really a paste.** A TUI can't receive OS file-drop events; the
+  emulator pastes the *path* into the input, so drag → path appears → Enter ingests. `drop_paths`
+  only fires when the whole input resolves to real ingestable file(s), so a normal message that
+  happens to mention a path is never hijacked.

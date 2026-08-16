@@ -36,6 +36,9 @@ from .widgets.rag_list import RagList
 from .widgets.spinner import WaitingIndicator
 
 DEFAULT_TITLE = "New conversation"
+# Files a drag-and-drop onto the prompt will ingest (§10). Dragging a file makes the terminal
+# *paste its path* into the input; we detect that and route it to /rag instead of sending it.
+_INGESTABLE_SUFFIXES = {".pdf", ".txt", ".md", ".markdown"}
 # The standard, non-persona model every new conversation starts on (§8). Personas are an overlay
 # the keyword router switches to and reverts from; they never become a conversation's base.
 DEFAULT_MODEL = "qwen"
@@ -48,6 +51,38 @@ _SWITCH_TOASTS = {
     "british": "Switching to British mode, mate 🇬🇧",
     "scottish": "Switching to Scottish mode, aye 🏴󠁧󠁢󠁳󠁣󠁴󠁿",
 }
+
+
+def _clean_drop_token(token: str) -> Path:
+    """Normalise one dropped/pasted path token: quotes, file:// URLs, escaped spaces, ~."""
+    token = token.strip().strip("'\"")
+    if token.startswith("file://"):
+        from urllib.parse import unquote, urlparse
+
+        token = unquote(urlparse(token).path)
+    token = token.replace("\\ ", " ")  # macOS terminals backslash-escape spaces on drop
+    return Path(token).expanduser()
+
+
+def drop_paths(text: str) -> list[Path]:
+    """Ingestable file paths IFF the whole input is dropped file(s); else [] (so normal messages,
+    even ones that mention a path, are never hijacked)."""
+    text = text.strip()
+    if not text:
+        return []
+
+    def ok(p: Path) -> bool:
+        return p.is_file() and p.suffix.lower() in _INGESTABLE_SUFFIXES
+
+    whole = _clean_drop_token(text)  # covers a single path, incl. escaped spaces
+    if ok(whole):
+        return [whole]
+    tokens = text.replace("\n", " ").split()  # multiple simple (space-free) paths
+    if len(tokens) > 1:
+        cleaned = [_clean_drop_token(t) for t in tokens]
+        if all(ok(p) for p in cleaned):
+            return cleaned
+    return []
 
 
 class ChatApp(App[None]):
@@ -95,7 +130,8 @@ class ChatApp(App[None]):
                 yield VerticalScroll(id="log")
                 yield WaitingIndicator(id="waiting")
                 yield Input(
-                    placeholder="Message bpx…   (/model · /keywords · /memory · /help)", id="prompt"
+                    placeholder="Message bpx…   (drag a PDF to add it · /memory · /help)",
+                    id="prompt",
                 )
         yield Footer()
 
@@ -233,6 +269,11 @@ class ChatApp(App[None]):
         if not text or self.store is None or self.conversation_id is None:
             return
         event.input.value = ""
+        dropped = drop_paths(text)  # a drag-and-dropped file path -> ingest, don't send
+        if dropped:
+            for path in dropped:
+                self._rag_add(str(path))
+            return
         if text.startswith("/"):
             await self._handle_command(text)
             return
