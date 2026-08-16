@@ -51,10 +51,12 @@ column added in the persistence step.
 ## Gotchas
 
 - A model only works if its `model_id` is pulled in Ollama; `bpx setup` flags missing ones.
-- Reasoning models (e.g. `qwen3.5`) "think" before answering and reprocess the whole history,
-  so they feel slow — switch to `gemma3:1b` for snappy replies. This is why the waiting
-  animation matters.
+- Reasoning models (the standard `qwen3:8b`) "think" before answering and reprocess the whole
+  history, so first content can be 30–40s away. `LLMClient.stream` yields `reasoning` *and*
+  `content` chunks and the TUI shows the reasoning live ("💭 thinking…"), so a long think shows
+  progress instead of a frozen/blank reply — the earlier "no response at all" bug. Personas are
+  served non-thinking (`reasoning_effort="none"`), so they never emit reasoning.
 - `query_one(ModelPicker)` fails while the modal is open — it's `app.screen`, not a child.
-- The Phase-0 `models.toml` still points `qwen` at an installed tag, **not** the plan's locked
-  persona base `qwen3:8b`; reconcile before Phase 2 / gate G1 (PLAN.md §7.1).
+- `qwen` now points at the plan's locked base `qwen3:8b` (Ch. 06); the personas point at the
+  trained `bpx-british` / `bpx-scottish`.
 - Keep the repo out of iCloud-synced folders — conflicted `.venv` copies break `uv`.

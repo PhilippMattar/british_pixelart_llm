@@ -196,20 +196,43 @@ async def test_keyword_autoswitches_persona(db):
         await _send(app, pilot, "Alright mate, fancy a cuppa? innit")
         assert app.model_name == "british"  # auto-switched on British keywords
         roles = [m.role for m in app.store.list_messages(app.conversation_id)]
-        assert "event" in roles  # switch logged into the conversation
+        assert "event" not in roles  # switch is a toast only, not an in-chat message
 
 
-async def test_manual_model_pins_and_disables_autoswitch(db):
+async def test_manual_persona_pins_and_disables_autoswitch(db):
     app = ChatApp(client_factory=_factory())
     async with app.run_test() as pilot:
-        await _command(app, pilot, "/model gemma")  # manual choice pins
+        await _command(app, pilot, "/model british")  # a manual PERSONA choice pins
         assert app.store.get_conversation(app.conversation_id).auto_switch is False
         await _send(app, pilot, "Aye, dinnae be daft, it's dreich")  # would auto-switch
-        assert app.model_name == "gemma"  # but stays pinned
+        assert app.model_name == "british"  # but stays pinned
 
 
-async def test_plain_message_does_not_autoswitch(db):
+async def test_manual_base_keeps_autoswitch_and_reverts_to_it(db):
     app = ChatApp(client_factory=_factory())
     async with app.run_test() as pilot:
+        await _command(app, pilot, "/model gemma")  # a base model: routing stays on
+        conv = app.store.get_conversation(app.conversation_id)
+        assert conv.auto_switch is True and conv.base_model == "gemma"
+        await _send(app, pilot, "Aye, it's pure dreich, dinnae ye think")
+        assert app.model_name == "scottish"  # persona overlays
         await _send(app, pilot, "Please summarize this paragraph.")
-        assert app.model_name == "qwen"  # no keyword, no switch
+        assert app.model_name == "gemma"  # reverts to the chosen base, not qwen
+
+
+async def test_plain_message_reverts_to_base(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "Aye, it's pure dreich, dinnae ye think")
+        assert app.model_name == "scottish"  # overlaid a persona
+        await _send(app, pilot, "Please summarize this paragraph.")
+        assert app.model_name == "qwen"  # no keyword -> back to the default base
+
+
+async def test_new_conversation_resets_to_default_model(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        await _send(app, pilot, "Alright mate, fancy a cuppa? innit")
+        assert app.model_name == "british"  # drifted to a persona
+        await _command(app, pilot, "/new")
+        assert app.model_name == "qwen"  # a fresh conversation starts on the standard model

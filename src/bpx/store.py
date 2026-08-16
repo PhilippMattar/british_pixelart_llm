@@ -83,8 +83,21 @@ def _migration_003(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migration_004(conn: sqlite3.Connection) -> None:
+    # Per-conversation BASE model (§8): the non-persona model that keyword auto-switch overlays a
+    # persona on top of, and reverts to when no keyword is present. Defaults to 'qwen'; existing
+    # rows adopt their current model_name if it isn't a persona, else 'qwen'.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+    if "base_model" not in columns:
+        conn.execute("ALTER TABLE conversations ADD COLUMN base_model TEXT NOT NULL DEFAULT 'qwen'")
+        conn.execute(
+            "UPDATE conversations SET base_model = model_name "
+            "WHERE model_name NOT IN ('british', 'scottish')"
+        )
+
+
 # Ordered; MIGRATIONS[i] upgrades version i -> i+1.
-MIGRATIONS = [_migration_001, _migration_002, _migration_003]
+MIGRATIONS = [_migration_001, _migration_002, _migration_003, _migration_004]
 
 
 # --- row types ------------------------------------------------------------------
@@ -99,6 +112,7 @@ class Conversation:
     created_at: str
     updated_at: str
     auto_switch: bool = True
+    base_model: str = "qwen"
 
 
 @dataclass(frozen=True)
@@ -204,6 +218,13 @@ class Store:
                 (model_name, conversation_id),
             )
 
+    def set_base_model(self, conversation_id: int, model_name: str) -> None:
+        with self._conn:
+            self._conn.execute(
+                "UPDATE conversations SET base_model = ? WHERE id = ?",
+                (model_name, conversation_id),
+            )
+
     def set_auto_switch(self, conversation_id: int, enabled: bool) -> None:
         with self._conn:
             self._conn.execute(
@@ -262,6 +283,7 @@ class Store:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             auto_switch=bool(row["auto_switch"]),
+            base_model=row["base_model"],
         )
 
     @staticmethod
