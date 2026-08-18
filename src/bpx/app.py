@@ -15,8 +15,9 @@ from asyncio import CancelledError
 from collections.abc import Callable
 from dataclasses import replace
 
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
+from textual.message import Message as TextualMessage
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Markdown
 
@@ -85,6 +86,29 @@ def drop_paths(text: str) -> list[Path]:
     return []
 
 
+class PromptInput(Input):
+    """The message input — but a dropped *file path* is a file drop, not text. When the input is
+    focused, Textual delivers the paste here (and its own handler would insert the path); we detect
+    a file drop, suppress that, and emit a FileDropped message the app ingests. Normal text pastes
+    behave as usual."""
+
+    class FileDropped(TextualMessage):
+        def __init__(self, paths: list[Path]) -> None:
+            self.paths = paths
+            super().__init__()
+
+    def _on_paste(self, event: events.Paste) -> None:
+        # Textual calls every _on_paste in the MRO, so we must NOT call super(). On a file drop,
+        # prevent_default() skips Input's own paste handler and stop() keeps the raw paste from
+        # also reaching App.on_paste; the app ingests via FileDropped. Normal text falls through
+        # to Input's handler (no prevent_default), pasting as usual.
+        paths = drop_paths(event.text)
+        if paths:
+            event.prevent_default()
+            event.stop()
+            self.post_message(self.FileDropped(paths))
+
+
 class ChatApp(App[None]):
     TITLE = "bpx"
     SUB_TITLE = "british_pixelart_llm"
@@ -129,7 +153,7 @@ class ChatApp(App[None]):
             with Vertical(id="main"):
                 yield VerticalScroll(id="log")
                 yield WaitingIndicator(id="waiting")
-                yield Input(
+                yield PromptInput(
                     placeholder="Message bpx…   (drag a PDF to add it · /memory · /help)",
                     id="prompt",
                 )
@@ -262,6 +286,28 @@ class ChatApp(App[None]):
         await self._load_conversation(next_id)
         await self._refresh_sidebar()
         self.query_one("#prompt", Input).focus()
+
+    # -- drag-and-drop (§10) --
+    def _ingest_dropped(self, paths: list[Path]) -> None:
+        self.query_one("#prompt", Input).value = ""  # a drop is a file action, not text entry
+        for path in paths:
+            self._rag_add(str(path))
+
+    async def on_paste(self, event: events.Paste) -> None:
+        """Handles a drop when a NON-input widget has focus (e.g. you clicked the chat history):
+        the paste bubbles up to the app. A focused input instead routes through PromptInput ->
+        FileDropped below. Together they make a drop work regardless of what was last clicked."""
+        if self.store is None:
+            return
+        paths = drop_paths(event.text)
+        if not paths:
+            return
+        event.stop()
+        self._ingest_dropped(paths)
+
+    def on_prompt_input_file_dropped(self, message: PromptInput.FileDropped) -> None:
+        """A drop while the message input was focused."""
+        self._ingest_dropped(message.paths)
 
     # -- send / generate --
     async def on_input_submitted(self, event: Input.Submitted) -> None:

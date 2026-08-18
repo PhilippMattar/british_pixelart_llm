@@ -29,9 +29,11 @@ in a third route.
   before answering (spinner covers it), injects the source-tagged block as a system message, and
   appends the **Sources** legend to the reply. `/rag` opens the document modal.
 - `src/bpx/widgets/rag_list.py` — the `RagList` modal (view/delete documents).
-- Drag-and-drop: `drop_paths()` recognises when the prompt's text is actually a dropped file path
-  (quotes, `file://` URLs, macOS backslash-escaped spaces) and routes it to `/rag` instead of
-  sending it as a message — so dragging a PDF in and pressing Enter ingests it.
+- Drag-and-drop: `drop_paths()` recognises when a paste is really a dropped file path (quotes,
+  `file://` URLs, macOS backslash-escaped spaces). A `PromptInput` (Input subclass) turns a drop
+  onto the focused input into a `FileDropped` message; `App.on_paste` catches a drop when any
+  other widget is focused. Either way the file is ingested immediately (no Enter), regardless of
+  what was last clicked.
 
 ## Core concepts
 
@@ -80,7 +82,13 @@ in a third route.
   model; `from_blob`/`cosine` assume equal length.
 - **Chunk size approximates tokens by words** (~350 words ≈ 500 tokens) — fine for retrieval;
   swap in a real tokenizer if precision ever matters.
-- **Terminal "drag-and-drop" is really a paste.** A TUI can't receive OS file-drop events; the
-  emulator pastes the *path* into the input, so drag → path appears → Enter ingests. `drop_paths`
-  only fires when the whole input resolves to real ingestable file(s), so a normal message that
-  happens to mention a path is never hijacked.
+- **Terminal "drag-and-drop" is really a paste, and focus matters.** A TUI can't receive OS
+  file-drop events; the emulator pastes the *path* as a `Paste` event to the **focused** widget.
+  Handling it only on the input means a drop silently does nothing if you'd last clicked the chat
+  history. So it's handled in two places — `PromptInput` (input focused) and `App.on_paste`
+  (anything else focused). `drop_paths` only fires when the paste resolves entirely to real
+  ingestable file(s), so a normal message that mentions a path is never hijacked.
+- **Overriding Textual's paste needs care.** `_get_dispatch_methods` calls **every** `_on_paste`
+  in the MRO (until `prevent_default()`), so calling `super()._on_paste` double-inserts. The
+  subclass instead emits its own `FileDropped` message; and note `from .llm import Message`
+  shadows Textual's `Message`, so the base class must be imported aliased (`TextualMessage`).

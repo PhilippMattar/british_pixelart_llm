@@ -1,4 +1,5 @@
 import pytest
+from textual import events
 from textual.widgets import Input, ListView, Markdown
 
 from bpx.app import ChatApp
@@ -225,6 +226,45 @@ def test_drop_paths_detects_files_only(tmp_path):
     assert drop_paths("what does this paper say?") == []  # normal message
     assert drop_paths(str(tmp_path / "missing.pdf")) == []  # not a real file
     assert drop_paths(str(script)) == []  # not an ingestable type
+
+
+async def test_dropped_pdf_ingests_when_input_not_focused(db, tmp_path):
+    doc = tmp_path / "d.txt"
+    doc.write_text("apple banana " * 50)
+    app = ChatApp(client_factory=_factory(), embedder_factory=lambda base: _FakeEmbedder())
+    async with app.run_test() as pilot:
+        app.set_focus(None)  # simulate having clicked the chat history, not the input
+        app.post_message(events.Paste(str(doc)))  # the drop, delivered at app level
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        pid = app.store.default_project_id()
+        assert [d.title for d in app.store.list_documents(pid)] == ["d.txt"]
+        assert app.query_one("#prompt", Input).value == ""  # path not left dangling as text
+
+
+async def test_dropped_pdf_ingests_when_input_focused(db, tmp_path):
+    doc = tmp_path / "e.txt"
+    doc.write_text("apple banana " * 50)
+    app = ChatApp(client_factory=_factory(), embedder_factory=lambda base: _FakeEmbedder())
+    async with app.run_test() as pilot:
+        prompt = app.query_one("#prompt", Input)
+        prompt.focus()
+        prompt.post_message(events.Paste(str(doc)))  # drop while the input is focused
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert [d.title for d in app.store.list_documents(app.store.default_project_id())] == ["e.txt"]
+        assert prompt.value == ""  # ingested immediately, not inserted as text
+
+
+async def test_normal_paste_into_input_stays_text(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        prompt = app.query_one("#prompt", Input)
+        prompt.focus()
+        prompt.post_message(events.Paste("hello world"))  # ordinary paste, not a file
+        await pilot.pause()
+        assert prompt.value == "hello world"  # normal paste behaviour preserved
+        assert app.store.list_documents(app.store.default_project_id()) == []
 
 
 async def test_dropped_pdf_ingests_not_sends(db, tmp_path):
