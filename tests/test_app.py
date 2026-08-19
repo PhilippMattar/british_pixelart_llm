@@ -314,6 +314,16 @@ async def test_rag_modal_lists_and_deletes(db):
         assert app.store.list_documents(pid) == []
 
 
+async def test_web_toggle(db):
+    app = ChatApp(client_factory=_factory())
+    async with app.run_test() as pilot:
+        assert app.web_enabled is True  # on by default
+        await _command(app, pilot, "/web off")
+        assert app.web_enabled is False
+        await _command(app, pilot, "/web")  # bare toggle flips it back
+        assert app.web_enabled is True
+
+
 def _sidebar_count(app) -> int:
     return len(app.query_one("#sidebar", ListView).children)
 

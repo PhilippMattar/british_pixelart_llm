@@ -1,12 +1,12 @@
 """Textual chat app with a conversation sidebar and SQLite persistence (Phase 1).
 
-See PLAN.md §5, §9, §10. A left sidebar lists conversations (newest first); the right pane is
-the streaming chat log + input. Conversations are created/switched/removed (R4) and each
+See PLAN.md §5, §9, §10, §11. A left sidebar lists conversations (newest first); the right pane
+is the streaming chat log + input. Conversations are created/switched/removed (R4) and each
 resumes with full scrollback (R3). Slash commands: `/new`, `/delete`, `/model`, `/keywords`,
-`/memory`, `/rag add <path>`, `/help`, `/quit`. British/Scottish keywords overlay a persona on
-the conversation's base model (§8); project memories (§9) and RAG document context (§10) are
-injected as system messages. `client_factory` / `embedder_factory` are injectable so tests can
-supply fakes.
+`/memory`, `/rag add <path>`, `/search <q>`, `/web`, `/help`, `/quit`. British/Scottish keywords
+overlay a persona on the conversation's base model (§8); project memories (§9) and retrieved
+context — local docs (§10) or web search (§11), routed by one judge (orchestrator.py) — are
+injected as system messages. `client_factory` / `embedder_factory` are injectable for tests.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from textual.widgets import Footer, Header, Input, Label, ListItem, ListView, Ma
 
 from pathlib import Path
 
-from . import memory
+from . import memory, orchestrator
 from .llm import Chunk, LLMClient, Message
 from .rag import pipeline as rag
 from .rag.embed import Embedder
@@ -142,6 +142,7 @@ class ChatApp(App[None]):
         self._embedder_factory = embedder_factory
         self.store: Store | None = None
         self.model_name = DEFAULT_MODEL
+        self.web_enabled = True  # judge may route a query to agentic web search (§11); /web toggles
         self.conversation_id: int | None = None
         self._project_id: int | None = None
         self._conversation_ids: list[int] = []
@@ -154,7 +155,7 @@ class ChatApp(App[None]):
                 yield VerticalScroll(id="log")
                 yield WaitingIndicator(id="waiting")
                 yield PromptInput(
-                    placeholder="Message bpx…   (drag a PDF to add it · /memory · /help)",
+                    placeholder="Message bpx…   (drag a PDF · /search <q> · /memory · /help)",
                     id="prompt",
                 )
         yield Footer()
@@ -323,13 +324,19 @@ class ChatApp(App[None]):
         if text.startswith("/"):
             await self._handle_command(text)
             return
+        await self._send_user_message(text)
+
+    async def _send_user_message(self, text: str, *, force_web: bool = False) -> None:
+        """Persist + render a user turn, run persona routing, and kick off generation. `force_web`
+        (from /search) makes retrieval go straight to the web agent, skipping the judge."""
+        assert self.store is not None and self.conversation_id is not None
         self.store.add_message(self.conversation_id, "user", text)
         self.store.touch(self.conversation_id)
         self._maybe_set_title(text)
         await self._mount(self._user_md(text))
         await self._maybe_auto_switch(text)
         await self._refresh_sidebar()
-        self.generate()
+        self.generate(force_web=force_web)
 
     async def _maybe_auto_switch(self, text: str) -> None:
         """Keyword router (§8): a lexicon hit overlays that persona; no hit reverts to the
@@ -378,14 +385,25 @@ class ChatApp(App[None]):
                 self.action_rag()
             else:
                 self.notify("Usage: /rag add <path>  ·  /rag (to list)", severity="warning")
+        elif command == "search":
+            if arg:
+                await self._send_user_message(arg, force_web=True)
+            else:
+                self.notify("Usage: /search <query>", severity="warning")
+        elif command == "web":
+            if arg.lower() in ("on", "off"):
+                self.web_enabled = arg.lower() == "on"
+            else:
+                self.web_enabled = not self.web_enabled
+            self.notify(f"Web search {'on' if self.web_enabled else 'off'}")
         elif command == "help":
             self.notify(
-                "/new · /model · /keywords · /memory · /rag add <path> · /help · /quit",
+                "/new · /model · /keywords · /memory · /rag add <path> · /search <q> · /web · /help",
                 title="Commands",
                 timeout=6,
             )
-        elif command in ("project", "search"):
-            self.notify(f"/{command} arrives in a later phase.")
+        elif command == "project":
+            self.notify("/project arrives in a later phase.")
         else:
             self.notify(f"Unknown command: /{command}", severity="warning")
 
@@ -457,24 +475,34 @@ class ChatApp(App[None]):
     def _embedder(self) -> Embedder:
         return self._embedder_factory(self.registry.get(DEFAULT_MODEL).endpoint)
 
-    async def _rag_context(
-        self, query: str, history: list[Message]
+    async def _retrieval_context(
+        self, query: str, history: list[Message], *, force_web: bool
     ) -> tuple[list[Message], list[str]]:
-        """Run the adaptive-RAG pipeline if the project has documents (§10). Returns a leading
-        system message (source-tagged context) and the source legend, or empty if not retrieving."""
+        """Orchestrate retrieval (§10/§11): the judge routes to local docs / web / nothing. Returns
+        a leading source-tagged system message and the source legend, or empty if not retrieving."""
         assert self.store is not None and self._project_id is not None
-        if not query or not self.store.list_documents(self._project_id):
+        if not query:
             return [], []
-        embedder = self._embedder()
-        result = await rag.build_context(
-            self._control_client(), embedder, self.store, self._project_id, query, history
+        has_docs = bool(self.store.list_documents(self._project_id))
+        if not force_web and not has_docs and not self.web_enabled:
+            return [], []
+        result = await orchestrator.build_context(
+            self._control_client(),
+            self._embedder(),
+            self.store,
+            self._project_id,
+            query,
+            history,
+            web_enabled=self.web_enabled,
+            force_route="web" if force_web else None,
+            on_status=lambda msg: self.notify(msg, title="Web", timeout=4),
         )
         if result is None:
             return [], []
         return [Message("system", result.context)], result.sources
 
     @work(exclusive=True)
-    async def generate(self) -> None:
+    async def generate(self, force_web: bool = False) -> None:
         assert self.store is not None and self.conversation_id is not None
         conversation_id = self.conversation_id
         history = [
@@ -496,8 +524,8 @@ class ChatApp(App[None]):
         rag_sources: list[str] = []
         cancelled = False
         try:
-            # Adaptive RAG runs before generation (slow LLM/embedding calls) — the spinner covers it.
-            rag_msgs, rag_sources = await self._rag_context(query, history)
+            # Retrieval (RAG / web) runs before generation (slow LLM/net calls) — spinner covers it.
+            rag_msgs, rag_sources = await self._retrieval_context(query, history, force_web=force_web)
             prompt = self._memory_prompt() + rag_msgs + history
             async for chunk in client.stream(prompt):
                 # Tolerate a plain-string stream (test fakes) as content; real client yields Chunk.

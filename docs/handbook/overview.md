@@ -63,7 +63,19 @@ again** (up to three tries); and a **summarizer** boils the hits down to the rel
 model then answers using only those passages and **cites its sources** (`[1]`), so you can check
 it didn't make things up. All local — the document never leaves your machine.
 
+**Phase 3 (cont.) — letting it search the web.** Documents cover what you've saved, but not what
+happened this morning. So for questions that need live information — today's weather, a recent
+result — the app can go online, and it does so like a little researcher rather than a single
+lookup: it runs a search, **reads** a promising page, and if that page links somewhere more useful
+it can **follow that link**, searching again if it's still stuck — all on a short budget so it
+doesn't wander forever. It then answers from what it read and **cites the web pages** it used, so
+you can click through and check. A "judge" decides up front whether a question even needs the web
+(it won't google "what's 2+2?"); you can also force a search with `/search`, or switch the whole
+thing off with `/web off`. The web is messy — lots of pages block bots or are empty — so it simply
+skips what it can't read and moves on.
+
 ## Where we are now
 
-Both personas are trained, measured, and wired in; the app has a cross-chat memory and can answer
-questions about your own documents with citations. Still to come: letting it **search the web**.
+The assistant is done in the round: two trainable personas, a cross-chat memory, question-answering
+over your own documents, and agentic web search — each with sources it can show. What's left is
+polish: the pixel-art waiting animations, one-command setup, and the demo.
