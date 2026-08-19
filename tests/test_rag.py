@@ -77,27 +77,15 @@ async def test_ingest_then_retrieve_nearest(tmp_path):
     store.close()
 
 
-async def test_build_context_local_returns_sources(tmp_path):
+async def test_build_local_context_returns_sources(tmp_path):
     store = Store.open(tmp_path / "r.db")
     pid = store.default_project_id()
     emb = _FakeEmbedder()
     (tmp_path / "a.txt").write_text("apple apple apple")
     await pipeline.ingest_document(store, emb, pid, str(tmp_path / "a.txt"))
 
-    result = await pipeline.build_context(_RoutingClient("LOCAL"), emb, store, pid, "apples?", [])
+    result = await pipeline.build_local_context(_RoutingClient(), emb, store, pid, "apples?", [])
     assert result is not None
     assert "[1]" in result.context
     assert result.sources and "a.txt" in result.sources[0]
-    store.close()
-
-
-async def test_build_context_direct_returns_none(tmp_path):
-    store = Store.open(tmp_path / "r.db")
-    pid = store.default_project_id()
-    emb = _FakeEmbedder()
-    (tmp_path / "a.txt").write_text("apple apple apple")
-    await pipeline.ingest_document(store, emb, pid, str(tmp_path / "a.txt"))
-
-    result = await pipeline.build_context(_RoutingClient("DIRECT"), emb, store, pid, "hi", [])
-    assert result is None
     store.close()

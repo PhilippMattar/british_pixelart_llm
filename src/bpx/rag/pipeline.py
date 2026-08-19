@@ -86,25 +86,6 @@ def library_summary(store: Store, project_id: int) -> str:
     return "\n".join(f"- {title}: {snippet}…" for title, snippet in firsts.items()) or "(none)"
 
 
-async def judge(client, query: str, history: list[Message], library: str) -> str:
-    """Route the query: 'local' (needs the user's docs), else 'none'. (Web arrives in §11.)"""
-    prompt = (
-        "The user has uploaded these documents (title: opening excerpt):\n"
-        f"{library}\n\n"
-        "Decide how to answer the user's latest message. Reply with ONE word:\n"
-        "- LOCAL if the message could be answered using these documents — their topics, facts, "
-        "or figures — or explicitly refers to them.\n"
-        "- DIRECT if it is general knowledge, chit-chat, about the assistant, or unrelated to the "
-        "documents above.\n\n"
-        f"Recent context:\n{_history_snippet(history)}\n\nUser message: {query}\n\nOne word:"
-    )
-    try:
-        reply = (await client.complete([Message("user", prompt)])).strip().upper()
-    except Exception:
-        return "none"
-    return "local" if "LOCAL" in reply else "none"
-
-
 async def rewrite(client, query: str, history: list[Message], note: str = "") -> str:
     hint = f"\n{note}" if note else ""
     prompt = (
@@ -148,13 +129,13 @@ async def summarize(client, query: str, numbered: list[tuple[int, RagChunk]]) ->
     return out or sources
 
 
-# --------------------------------------------------------------------------- orchestration
-async def build_context(
+# --------------------------------------------------------------------------- local retrieval
+async def build_local_context(
     client, embedder: Embedder, store: Store, project_id: int, query: str, history: list[Message]
 ) -> RagResult | None:
-    """Full pipeline. Returns an injectable source-tagged context, or None for no-retrieval."""
-    if await judge(client, query, history, library_summary(store, project_id)) != "local":
-        return None
+    """Retrieve + summarize the local documents into an injectable source-tagged context (the
+    routing decision is the orchestrator's; this assumes local docs are wanted). None if nothing
+    was retrieved."""
     collected: dict[int, RagChunk] = {}
     note = ""
     for _ in range(MAX_ROUNDS):
