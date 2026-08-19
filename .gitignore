@@ -35,3 +35,6 @@ Intelligent Agents Project Prompt.pdf
 # cache live on /sc/projects, never the repo.
 models/adapters/*.gguf
 training/work/
+
+# Stray editor/R artifacts
+.Rhistory
